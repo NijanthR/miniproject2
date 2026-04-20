@@ -133,8 +133,12 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-cors_origins = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173')
+default_cors_origins = 'http://localhost:5173,http://127.0.0.1:5173,https://miniproject2-alpha-one.vercel.app'
+cors_origins = os.getenv('CORS_ALLOWED_ORIGINS', default_cors_origins)
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins.split(',') if origin.strip()]
+
+csrf_trusted_origins = os.getenv('CSRF_TRUSTED_ORIGINS', 'https://miniproject2-alpha-one.vercel.app')
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in csrf_trusted_origins.split(',') if origin.strip()]
 
 CHANNEL_LAYERS = {
     'default': {

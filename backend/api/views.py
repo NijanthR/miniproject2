@@ -81,7 +81,45 @@ GOOGLE_OAUTH_CLIENT_SECRET = (
 	or os.getenv('secret_key')
 	or ''
 ).strip()
-GOOGLE_OAUTH_REDIRECT_URI = (os.getenv('GOOGLE_OAUTH_REDIRECT_URI') or 'http://localhost:5173').strip()
+_google_oauth_redirect_uris_raw = os.getenv('GOOGLE_OAUTH_REDIRECT_URIS', '').strip()
+if _google_oauth_redirect_uris_raw:
+	GOOGLE_OAUTH_REDIRECT_URIS = [
+		uri.strip().rstrip('/')
+		for uri in _google_oauth_redirect_uris_raw.split(',')
+		if uri.strip()
+	]
+else:
+	fallback_redirect = (os.getenv('GOOGLE_OAUTH_REDIRECT_URI') or 'http://localhost:5173').strip().rstrip('/')
+	GOOGLE_OAUTH_REDIRECT_URIS = [fallback_redirect] if fallback_redirect else []
+
+
+def _resolve_google_redirect_uri(request=None):
+	if not GOOGLE_OAUTH_REDIRECT_URIS:
+		return 'postmessage'
+
+	request_origin = ''
+	if request is not None:
+		request_origin = str(request.headers.get('Origin') or '').strip().rstrip('/')
+
+	if request_origin:
+		matches = [
+			redirect_uri
+			for redirect_uri in GOOGLE_OAUTH_REDIRECT_URIS
+			if redirect_uri == request_origin or redirect_uri.startswith(f'{request_origin}/')
+		]
+		if matches:
+			# Prefer path-based callbacks like /app when available.
+			matches.sort(key=len, reverse=True)
+			return matches[0]
+
+	return GOOGLE_OAUTH_REDIRECT_URIS[0]
+
+
+def _is_allowed_google_redirect_uri(redirect_uri):
+	normalized = str(redirect_uri or '').strip().rstrip('/')
+	if not normalized:
+		return False
+	return normalized in GOOGLE_OAUTH_REDIRECT_URIS
 
 # Temporary chat store kept in process memory only; it is cleared on server restart.
 _CONVERSATION_STORE = OrderedDict()
@@ -1173,10 +1211,11 @@ def community_messages_delete(request):
 def google_auth_config(request):
 	if not GOOGLE_OAUTH_CLIENT_ID:
 		return JsonResponse({'error': 'Google OAuth client ID is not configured on the server.'}, status=500)
+	redirect_uri = _resolve_google_redirect_uri(request)
 	return JsonResponse(
 		{
 			'clientId': GOOGLE_OAUTH_CLIENT_ID,
-			'redirectUri': GOOGLE_OAUTH_REDIRECT_URI,
+			'redirectUri': redirect_uri,
 		}
 	)
 
@@ -1193,7 +1232,13 @@ def google_auth(request):
 		return JsonResponse({'error': 'Invalid JSON payload.'}, status=400)
 
 	code = str(payload.get('code') or '').strip()
-	redirect_uri = str(payload.get('redirect_uri') or GOOGLE_OAUTH_REDIRECT_URI or 'postmessage').strip()
+	requested_redirect_uri = str(payload.get('redirect_uri') or '').strip().rstrip('/')
+	if requested_redirect_uri:
+		if not _is_allowed_google_redirect_uri(requested_redirect_uri):
+			return JsonResponse({'error': 'Invalid redirect_uri provided.'}, status=400)
+		redirect_uri = requested_redirect_uri
+	else:
+		redirect_uri = _resolve_google_redirect_uri(request)
 	if not code:
 		return JsonResponse({'error': 'Authorization code is required.'}, status=400)
 	if not redirect_uri:
