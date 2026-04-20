@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FcGoogle } from 'react-icons/fc'
+import { buildApiUrl } from '../config/api.js'
 
 const AUTH_USERS_KEY = 'teaching-assistant-auth-users'
 const GOOGLE_SCRIPT_SRC = 'https://accounts.google.com/gsi/client'
@@ -83,7 +84,7 @@ function AuthPage() {
       setAuthError('')
 
       try {
-        const response = await fetch('/api/auth/google/', {
+        const response = await fetch(buildApiUrl('/api/auth/google/'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ code, redirect_uri: redirectUri }),
@@ -192,7 +193,7 @@ function AuthPage() {
     setIsGoogleLoading(true)
 
     try {
-      const configResponse = await fetch('/api/auth/google/config/')
+      const configResponse = await fetch(buildApiUrl('/api/auth/google/config/'))
       const configPayload = await configResponse.json().catch(() => ({}))
       if (!configResponse.ok) {
         throw new Error(configPayload?.error || 'Google auth is not configured on the server.')

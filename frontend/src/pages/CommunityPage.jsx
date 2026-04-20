@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { FiSend, FiTrash2 } from 'react-icons/fi'
 import { useTheme } from '../context/ThemeContext.jsx'
+import { buildApiUrl } from '../config/api.js'
 
 const MESSAGE_TTL_MS = 60 * 1000
 const PROFILE_STORAGE_KEY = 'teaching-assistant-google-user'
@@ -59,7 +60,7 @@ function CommunityPage() {
 
   const fetchMessages = useCallback(async () => {
     try {
-      const response = await fetch(`/api/community/messages/?name=${encodeURIComponent(currentName)}`)
+      const response = await fetch(buildApiUrl(`/api/community/messages/?name=${encodeURIComponent(currentName)}`))
       if (!response.ok) throw new Error('Failed to load messages.')
       const payload = await response.json()
       setMessages(Array.isArray(payload?.messages) ? payload.messages : [])
@@ -98,7 +99,7 @@ function CommunityPage() {
     const trimmed = draft.trim()
     if (!trimmed) return
 
-    fetch('/api/community/messages/post/', {
+    fetch(buildApiUrl('/api/community/messages/post/'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -120,7 +121,7 @@ function CommunityPage() {
   }
 
   const handleDelete = (messageId) => {
-    fetch('/api/community/messages/delete/', {
+    fetch(buildApiUrl('/api/community/messages/delete/'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useTheme } from '../context/ThemeContext.jsx'
+import { buildApiUrl } from '../config/api.js'
 
 const LEVEL_ORDER = ['easy', 'medium', 'hard']
 const QUESTION_COUNT = 15
 
 async function requestGeneratedMcqQuestions(topic, level, count = QUESTION_COUNT) {
-  const response = await fetch('/api/test/mcq/generate/', {
+  const response = await fetch(buildApiUrl('/api/test/mcq/generate/'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -60,7 +61,7 @@ async function requestGeneratedMcqQuestionsViaChat(topic, level, count) {
     'Rules: exactly 4 options, one correct answer, no explanations, no markdown text outside JSON.',
   ].join(' ')
 
-  const response = await fetch('/api/chat/', {
+  const response = await fetch(buildApiUrl('/api/chat/'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -102,7 +103,7 @@ async function requestGeneratedMcqQuestionsViaChat(topic, level, count) {
 }
 
 async function requestGeneratedCodingChallenge(topic, difficulty = 'medium') {
-  const response = await fetch('/api/test/coding/generate/', {
+  const response = await fetch(buildApiUrl('/api/test/coding/generate/'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ topic, difficulty }),
@@ -221,7 +222,7 @@ async function requestGeneratedCodingChallengeViaChat(topic, difficulty) {
     'Rules: include exactly 2 visible_test_cases and exactly 4 hidden_test_cases. No markdown text outside JSON.',
   ].join(' ')
 
-  const response = await fetch('/api/chat/', {
+  const response = await fetch(buildApiUrl('/api/chat/'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -247,7 +248,7 @@ async function requestGeneratedCodingChallengeViaChat(topic, difficulty) {
 }
 
 async function requestRunCodingTest(code, functionName, testCases) {
-  const response = await fetch('/api/test/coding/run/', {
+  const response = await fetch(buildApiUrl('/api/test/coding/run/'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -312,7 +313,7 @@ async function requestCodingSolution(challenge, topic, difficulty) {
     'Rules: produce complete working code only, no explanation, no markdown outside JSON.',
   ].join(' ')
 
-  const response = await fetch('/api/chat/', {
+  const response = await fetch(buildApiUrl('/api/chat/'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

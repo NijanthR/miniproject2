@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom'
 import ChatBody from '../components/ChatBody.jsx'
 import ChatInput from '../components/ChatInput.jsx'
 import { useTheme } from '../context/ThemeContext.jsx'
+import { buildApiUrl } from '../config/api.js'
 
 const CHAT_CONVERSATION_ID_KEY = 'teaching-assistant-conversation-id'
 const CHAT_MESSAGES_KEY = 'teaching-assistant-chat-messages'
@@ -956,7 +957,7 @@ function DashboardPage({ size }) {
 
     const loadHistory = async () => {
       try {
-        const response = await fetch(`/api/chat/history/?conversation_id=${encodeURIComponent(conversationId)}`)
+        const response = await fetch(buildApiUrl(`/api/chat/history/?conversation_id=${encodeURIComponent(conversationId)}`))
         if (!response.ok) return
 
         const data = await response.json()
@@ -1050,7 +1051,7 @@ function DashboardPage({ size }) {
     )))
 
     try {
-      const response = await fetch('/api/chat/', {
+      const response = await fetch(buildApiUrl('/api/chat/'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1289,7 +1290,7 @@ function DashboardPage({ size }) {
     setIsGenerating(true)
 
     try {
-      const response = await fetch('/api/chat/', {
+      const response = await fetch(buildApiUrl('/api/chat/'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -8,6 +8,7 @@ import SettingsPage from './pages/SettingsPage.jsx'
 import ProfilePage from './pages/ProfilePage.jsx'
 import AuthPage from './pages/AuthPage.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
+import { buildApiUrl } from './config/api.js'
 
 function App() {
   return (
@@ -41,7 +42,7 @@ function DesktopChatPreview() {
 
     const completeGoogleAuth = async () => {
       try {
-        const response = await fetch('/api/auth/google/', {
+        const response = await fetch(buildApiUrl('/api/auth/google/'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ code, redirect_uri: redirectUri }),
