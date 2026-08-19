@@ -1,5 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
-import { FiCopy, FiDownload, FiPlay, FiRefreshCw, FiThumbsDown, FiThumbsUp, FiTrash2 } from 'react-icons/fi'
+import {
+  FiArrowDown,
+  FiBookOpen,
+  FiCheck,
+  FiCode,
+  FiCopy,
+  FiDownload,
+  FiHelpCircle,
+  FiPlay,
+  FiRefreshCw,
+  FiThumbsDown,
+  FiThumbsUp,
+  FiTrash2,
+  FiVolume2,
+  FiVolumeX,
+  FiZap,
+} from 'react-icons/fi'
 import { RiSparklingFill } from 'react-icons/ri'
 import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
@@ -207,35 +223,18 @@ function toSentenceCase(value = '') {
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
-function getBaseStudySubject(topics = []) {
-  return (
-    topics.find((topic) => /(regression|classification|algorithm|model|neural network|probability|statistics)/i.test(topic)) ||
-    topics[0] ||
-    'the concept'
-  )
-}
+function cleanTopicTitle(raw = '') {
+  let cleaned = String(raw || '')
+    .replace(/^#+\s*/, '')
+    .replace(/^(\d+[.)]\s*|step\s*\d+:?\s*|[A-Z]\.\s*)/i, '')
+    .replace(/^(topic|concept|part|section|module|overview|module \d+)\s*:\s*/i, '')
+    .replace(/^(ai|ml|python|javascript)\s*:\s*/i, '')
+    .replace(/[*_`]/g, '')
+    .replace(/[.:;,-]+$/, '')
+    .trim()
 
-function expandTopicForBeginners(topic, baseSubject) {
-  const clean = String(topic || '').replace(/^the\s+/i, '').trim()
-  if (/^core idea$/i.test(clean)) return `Core idea of ${baseSubject}`
-  if (/^equation$/i.test(clean)) return `Model equation of ${baseSubject}`
-  if (/^intuition$/i.test(clean)) return `Intuition behind ${baseSubject}`
-  return toSentenceCase(topic)
-}
-
-function getTopicMeaning(topic) {
-  const value = String(topic || '').toLowerCase()
-  if (value.includes('core idea')) return 'The main intuition in simple words.'
-  if (value.includes('equation')) return 'The formula that connects inputs and output.'
-  if (value.includes('beta') || value.includes('coefficient')) return 'A number that shows how strongly a feature affects the result.'
-  if (value.includes('feature')) return 'An input variable used for prediction.'
-  if (value.includes('intercept')) return 'The starting value when input is zero.'
-  if (value.includes('common confusion')) return 'A frequent misunderstanding and how to avoid it.'
-  if (value.includes('quick recap')) return 'A short summary to lock in understanding.'
-  if (value.includes('given') || value.includes('problem statement')) return 'What information is provided and what is being asked.'
-  if (value.includes('complexity')) return 'How performance changes with input size and edge cases.'
-  if (value.includes('time strategy')) return 'How to prioritize steps and avoid spending too long.'
-  return 'A key concept to understand before moving to the next step.'
+  if (!cleaned) return ''
+  return toSentenceCase(cleaned)
 }
 
 function extractPromptTopic(prompt = '') {
@@ -249,7 +248,6 @@ function extractPromptTopic(prompt = '') {
   const greetingPattern = /^(hi|hello|hey|yo|hola|namaste|good\s+(morning|afternoon|evening)|how are you|what'?s up|sup|thanks?|thank you)$/i
   if (greetingPattern.test(cleaned)) return ''
 
-  const lower = cleaned.toLowerCase()
   const patterns = [
     /(?:about|on|regarding|for)\s+([^?.!,;]+)/i,
     /(?:what is|what are|explain|teach|describe|help me understand|summarize)\s+([^?.!,;]+)/i,
@@ -258,443 +256,294 @@ function extractPromptTopic(prompt = '') {
   for (const pattern of patterns) {
     const match = cleaned.match(pattern)
     if (match?.[1]) {
-      return toSentenceCase(match[1])
+      return cleanTopicTitle(match[1])
     }
   }
 
-  if (lower.length <= 80) return toSentenceCase(cleaned)
-  return toSentenceCase(cleaned.split(' ').slice(0, 10).join(' '))
-}
-
-function isLikelyStudyRequest(prompt = '', response = '') {
-  const promptText = String(prompt || '').trim().toLowerCase()
-  const responseText = String(response || '').trim().toLowerCase()
-
-  if (!promptText && !responseText) return false
-
-  const greetingOrSmallTalkPattern = /(^(hi|hello|hey|yo|hola|namaste)\b|how are you|what'?s up|sup\b|good\s+(morning|afternoon|evening)|thank(s| you)?\b|bye\b)/i
-  const studyKeywordPattern = /(explain|teach|learn|study|topic|concept|define|definition|difference|compare|how|why|what is|solve|problem|equation|formula|derivation|example|exercise|chapter|syllabus|exam|test|quiz|revision|algorithm|model|theorem|proof|interview)/i
-  const structurePattern = /(^\s*[-*]\s+|^\s*\d+\.\s+|^\s*#{1,3}\s+)/m
-  const mathPattern = /(\$[^$]+\$|\b\d+\b|=|\+|-|\*|\/|\^)/
-
-  if (greetingOrSmallTalkPattern.test(promptText) && !studyKeywordPattern.test(promptText)) {
-    return false
-  }
-
-  if (studyKeywordPattern.test(promptText)) return true
-  if (studyKeywordPattern.test(responseText)) return true
-  if (structurePattern.test(responseText)) return true
-  if (mathPattern.test(responseText) && promptText.split(/\s+/).length >= 3) return true
-
-  return false
-}
-
-function tokenizeTopic(value = '') {
-  const stopWords = new Set([
-    'the', 'a', 'an', 'and', 'or', 'to', 'of', 'in', 'on', 'for', 'is', 'are', 'with', 'from', 'by', 'about',
-    'what', 'how', 'why', 'when', 'where', 'which', 'who', 'it', 'this', 'that', 'these', 'those', 'explain',
-    'describe', 'teach', 'help', 'understand',
-  ])
-
-  return String(value || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, ' ')
-    .split(/\s+/)
-    .filter((token) => token.length >= 3 && !stopWords.has(token))
-}
-
-function areTopicsRelated(candidate = '', promptTopic = '') {
-  const promptTokens = tokenizeTopic(promptTopic)
-  if (!promptTokens.length) return true
-  const candidateTokens = new Set(tokenizeTopic(candidate))
-  return promptTokens.some((token) => candidateTokens.has(token))
-}
-
-function getResponseFocusAreas(text = '') {
-  const value = String(text || '').toLowerCase()
-  const focus = []
-
-  const add = (item) => {
-    if (!item) return
-    if (focus.includes(item)) return
-    focus.push(item)
-  }
-
-  if (/(what is|definition|defined as|means|refers to)/.test(value)) add('basics')
-  if (/(how it works|workflow|steps|process|works by)/.test(value)) add('how it works')
-  if (/(equation|formula|beta|coefficient|slope|intercept)/.test(value)) add('equation and interpretation')
-  if (/(assumption|normality|linearity|independence|multicollinearity)/.test(value)) add('assumptions')
-  if (/(example|sample|case study|scenario)/.test(value)) add('examples')
-  if (/(application|use case|real world|industry)/.test(value)) add('applications')
-
-  return focus.slice(0, 4)
-}
-
-function getPromptFocusAreas(prompt = '') {
-  const value = String(prompt || '').toLowerCase()
-  const focus = []
-
-  const add = (item) => {
-    if (!item) return
-    if (focus.includes(item)) return
-    focus.push(item)
-  }
-
-  if (/(what is|what are|define|definition|meaning)/.test(value)) add('basics')
-  if (/(how|work|process|steps|mechanism)/.test(value)) add('how it works')
-  if (/(equation|formula|derive|interpret|slope|intercept|coefficient)/.test(value)) add('equation and interpretation')
-  if (/(assumption|condition|constraint|validity)/.test(value)) add('assumptions')
-  if (/(example|solve|problem|practice|numerical|sample)/.test(value)) add('examples')
-  if (/(application|use case|real world|industry|where used)/.test(value)) add('applications')
-
-  return focus.slice(0, 4)
-}
-
-function buildClearSuggestion(topic, focus) {
-  const cleanTopic = String(topic || '').trim()
-  const cleanFocus = String(focus || '').trim()
-  if (!cleanTopic || !cleanFocus) return ''
-
-  if (cleanFocus === 'basics') return `Basics of ${cleanTopic}`
-  if (cleanFocus === 'how it works') return `How ${cleanTopic} works`
-  if (cleanFocus === 'equation and interpretation') return `${cleanTopic}: equation and interpretation`
-  if (cleanFocus === 'assumptions') return `${cleanTopic}: assumptions and checks`
-  if (cleanFocus === 'examples') return `${cleanTopic}: examples and solving`
-  if (cleanFocus === 'applications') return `${cleanTopic}: practical applications`
-  return `${cleanTopic}: ${cleanFocus}`
-}
-
-function detectQuestionStyle(prompt = '', response = '') {
-  const value = `${prompt} ${response}`.toLowerCase()
-
-  if (/(code|implement|function|python|javascript|java|c\+\+|algorithm|program)/.test(value)) return 'coding'
-  if (/(compare|difference|vs\.?|versus|distinguish)/.test(value)) return 'comparison'
-  if (/(solve|numerical|calculate|find|compute|problem)/.test(value)) return 'problem-solving'
-  if (/(steps|process|workflow|pipeline|how.*works)/.test(value)) return 'process'
-  if (/(exam|test|interview|mcq|revision|prepare)/.test(value)) return 'exam'
-  if (/(what is|define|definition|meaning|introduce|basics)/.test(value)) return 'definition'
-
-  return 'conceptual'
-}
-
-function getStudyFlowTemplate(topic, style) {
-  const cleanTopic = String(topic || '').trim() || 'this topic'
-
-  if (style === 'definition') {
-    return [
-      `Core idea of ${cleanTopic}`,
-      `${cleanTopic}: key terms`,
-      `${cleanTopic}: simple example`,
-      `${cleanTopic}: common confusion`,
-      `${cleanTopic}: quick recap`,
-    ]
-  }
-
-  if (style === 'process') {
-    return [
-      `${cleanTopic}: goal`,
-      `${cleanTopic}: inputs`,
-      `How ${cleanTopic} works`,
-      `${cleanTopic}: output interpretation`,
-      `${cleanTopic}: real-world flow`,
-    ]
-  }
-
-  if (style === 'problem-solving') {
-    return [
-      `${cleanTopic}: problem statement`,
-      `${cleanTopic}: choose method`,
-      `${cleanTopic}: step-by-step solving`,
-      `${cleanTopic}: verify result`,
-      `${cleanTopic}: practice variation`,
-    ]
-  }
-
-  if (style === 'comparison') {
-    return [
-      `${cleanTopic}: option A`,
-      `${cleanTopic}: option B`,
-      `${cleanTopic}: key differences`,
-      `${cleanTopic}: when to use each`,
-      `${cleanTopic}: pitfalls`,
-    ]
-  }
-
-  if (style === 'coding') {
-    return [
-      `${cleanTopic}: problem statement`,
-      `${cleanTopic}: approach`,
-      `${cleanTopic}: code structure`,
-      `${cleanTopic}: dry run`,
-      `${cleanTopic}: complexity and edge cases`,
-    ]
-  }
-
-  if (style === 'exam') {
-    return [
-      `${cleanTopic}: high-yield basics`,
-      `${cleanTopic}: must-know concepts`,
-      `${cleanTopic}: question patterns`,
-      `${cleanTopic}: time strategy`,
-      `${cleanTopic}: final revision`,
-    ]
-  }
-
-  return [
-    `Basics of ${cleanTopic}`,
-    `How ${cleanTopic} works`,
-    `${cleanTopic}: equation and interpretation`,
-    `${cleanTopic}: examples and solving`,
-    `${cleanTopic}: intuition`,
-  ]
+  if (cleaned.length <= 60) return cleanTopicTitle(cleaned)
+  return cleanTopicTitle(cleaned.split(' ').slice(0, 6).join(' '))
 }
 
 function suggestStudyTopics(text = '', userPrompt = '') {
   const cleaned = normalizeAssistantText(text)
-    .replace(/\$\$[\s\S]*?\$\$/g, ' ')
-    .replace(/\$[^$]*\$/g, ' ')
+  const lines = cleaned.split('\n').map((l) => l.trim()).filter(Boolean)
 
-  if (!isLikelyStudyRequest(userPrompt, cleaned)) return []
+  const ignoredPatterns = [
+    /^(introduction|summary|conclusion|takeaway|takeaways|key takeaways?|important topics?|overview|example|examples|code|python code|dry run|problem statement|complexity|approach|prerequisites|note|important|definition)$/i,
+    /^(step \d+|part \d+|section \d+)$/i,
+  ]
 
-  const lines = cleaned.split('\n').map((line) => line.trim()).filter(Boolean)
-  const candidates = []
+  const extracted = []
+  const addTopic = (raw) => {
+    const topic = cleanTopicTitle(raw)
+    if (!topic || topic.length < 3 || topic.length > 50) return
+    if (ignoredPatterns.some((rgx) => rgx.test(topic))) return
+    if (extracted.some((t) => t.toLowerCase() === topic.toLowerCase())) return
+    extracted.push(topic)
+  }
 
+  // 1. Extract markdown headings (##, ###)
   for (const line of lines) {
-    const headingMatch = line.match(/^#{1,3}\s+(.{3,80})$/)
+    const headingMatch = line.match(/^#{1,4}\s+(.+)$/)
     if (headingMatch) {
-      candidates.push(headingMatch[1])
-      continue
-    }
-
-    const sectionMatch = line.match(/^\d+(?:\.\d+)?\s+(.{3,80})$/)
-    if (sectionMatch) {
-      candidates.push(sectionMatch[1])
-    }
-
-    const bulletLabelMatch = line.match(/^(?:[-*]|\d+\.)\s+([^:]{3,70}):/)
-    if (bulletLabelMatch) {
-      candidates.push(bulletLabelMatch[1])
-    }
-
-    const definitionMatch = line.match(/^([A-Za-z][A-Za-z0-9_ ()/-]{2,70})\s+(?:is|are|means|refers to)\s+/i)
-    if (definitionMatch) {
-      candidates.push(definitionMatch[1])
+      addTopic(headingMatch[1])
     }
   }
 
-  const ignored = new Set([
-    'introduction',
-    'summary',
-    'conclusion',
-    'example',
-    'what it is',
-    'the goal',
-    'how it works',
-    'how it works simply',
-    'important topics',
-    'key takeaways',
-  ])
-  const normalized = candidates
-    .map((item) => item.replace(/[*_`#>]/g, '').replace(/[.:]+$/, '').trim())
-    .map(toSentenceCase)
-    .filter((item) => item.length >= 3 && item.length <= 60)
-    .filter((item) => !ignored.has(item.toLowerCase()))
-
-  const baseSubject = getBaseStudySubject(normalized)
-  const expanded = normalized.map((topic) => expandTopicForBeginners(topic, baseSubject))
-
-  const deduped = []
-  for (const item of expanded) {
-    if (deduped.some((existing) => existing.toLowerCase() === item.toLowerCase())) continue
-    deduped.push(item)
-    if (deduped.length >= 6) break
-  }
-
-  const promptTopic = extractPromptTopic(userPrompt)
-  if (!promptTopic) return deduped
-
-  const style = detectQuestionStyle(userPrompt, cleaned)
-  const templateTopics = getStudyFlowTemplate(promptTopic, style)
-  const related = deduped.filter((topic) => areTopicsRelated(topic, promptTopic))
-  const promptFocusAreas = getPromptFocusAreas(userPrompt)
-  const focusAreas = getResponseFocusAreas(cleaned)
-  const mergedFocusAreas = [...promptFocusAreas, ...focusAreas].filter((item, index, arr) => arr.indexOf(item) === index)
-
-  const suggestions = []
-  const addSuggestion = (value) => {
-    const topic = String(value || '').trim()
-    if (!topic) return
-    if (suggestions.some((item) => item.toLowerCase() === topic.toLowerCase())) return
-    suggestions.push(topic)
-  }
-
-  templateTopics.forEach(addSuggestion)
-  mergedFocusAreas.forEach((focus) => addSuggestion(buildClearSuggestion(promptTopic, focus)))
-
-  related.forEach((topic) => {
-    const singleWord = /^\w+$/.test(topic)
-    if (singleWord) {
-      addSuggestion(`${promptTopic}: ${topic.toLowerCase()} concepts`)
-      return
+  // 2. Extract bold lead-in titles from bullet lists (e.g. "- **Gradient Descent:** ...")
+  for (const line of lines) {
+    const boldMatch = line.match(/^(?:[-*•]|\d+[.)])\s+\*\*([^*]+)\*\*(?:\s*[:–-]\s*|\s*$)/)
+    if (boldMatch) {
+      addTopic(boldMatch[1])
     }
-    addSuggestion(topic)
-  })
-
-  if (suggestions.length >= 3) return suggestions.slice(0, 6)
-
-  const enriched = []
-  const addUnique = (value) => {
-    const topic = String(value || '').trim()
-    if (!topic) return
-    if (enriched.some((item) => item.toLowerCase() === topic.toLowerCase())) return
-    enriched.push(topic)
   }
 
-  related.forEach(addUnique)
-  deduped.forEach((topic) => {
-    const singleWord = /^\w+$/.test(topic)
-    if (singleWord) {
-      addUnique(`${promptTopic}: ${topic.toLowerCase()} concepts`)
-    } else {
-      addUnique(`${promptTopic}: ${topic}`)
+  // 3. Extract standalone bold lines
+  for (const line of lines) {
+    const standaloneBold = line.match(/^\*\*([^*]{3,45})\*\*$/)
+    if (standaloneBold) {
+      addTopic(standaloneBold[1])
     }
-  })
-
-  if (!enriched.length) {
-    addUnique(buildClearSuggestion(promptTopic, 'basics'))
-    addUnique(buildClearSuggestion(promptTopic, 'how it works'))
-    addUnique(buildClearSuggestion(promptTopic, 'applications'))
   }
 
-  enriched.forEach(addSuggestion)
-
-  if (suggestions.length < 3) {
-    addSuggestion(buildClearSuggestion(promptTopic, 'basics'))
-    addSuggestion(buildClearSuggestion(promptTopic, 'how it works'))
-    addSuggestion(buildClearSuggestion(promptTopic, 'equation and interpretation'))
-    addSuggestion(buildClearSuggestion(promptTopic, 'examples'))
-    addSuggestion(buildClearSuggestion(promptTopic, 'applications'))
+  // 4. If fewer than 3, extract capitalized technical multi-word terms
+  if (extracted.length < 3) {
+    const phraseMatches = cleaned.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b/g) || []
+    for (const phrase of phraseMatches) {
+      if (extracted.length >= 4) break
+      addTopic(phrase)
+    }
   }
 
-  return suggestions.slice(0, 6)
+  // 5. If still empty, fall back to clean domain topics derived from user prompt
+  if (!extracted.length) {
+    const promptTopic = cleanTopicTitle(extractPromptTopic(userPrompt) || 'Core Subject')
+    return [
+      `Foundations of ${promptTopic}`,
+      `Core Mechanics & Working`,
+      `Practical Implementation`,
+      `Optimization & Edge Cases`,
+    ]
+  }
+
+  return extracted.slice(0, 5)
+}
+
+function getContextualTopicSnippet(topic = '', text = '') {
+  const plainText = markdownToPlainText(text)
+  const cleanTop = cleanTopicTitle(topic)
+  if (!cleanTop || !plainText) return 'Key concept covered in this study module.'
+
+  const cleanTokens = cleanTop.toLowerCase().split(/\s+/).filter((t) => t.length > 2)
+  const sentences = plainText.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean)
+
+  for (const sentence of sentences) {
+    const lower = sentence.toLowerCase()
+    const hasKey = cleanTokens.some((tok) => lower.includes(tok))
+    if (hasKey && sentence.length >= 25 && sentence.length <= 160 && !sentence.startsWith('#')) {
+      return sentence.replace(/^[-*•]\s*/, '').trim()
+    }
+  }
+
+  return `Core mechanics and practical applications of ${cleanTop.toLowerCase()}.`
 }
 
 function summarizeLearningPoints(text = '', topics = []) {
-  const cleaned = normalizeAssistantText(text)
-    .replace(/\$\$[\s\S]*?\$\$/g, ' ')
-    .replace(/\$[^$]*\$/g, ' ')
-    .replace(/[*_`>#]/g, ' ')
+  const plain = markdownToPlainText(text)
+  const lines = plain.split('\n').map((l) => l.trim()).filter(Boolean)
 
-  const lines = cleaned.split('\n').map((line) => line.trim()).filter(Boolean)
-  const importantPattern = /^(important|key point|takeaway|warning)\s*[:.-]\s*(.+)$/i
-  const bulletPattern = /^(?:[-*]|\d+\.)\s+(.{12,180})$/
-  const sentencePattern = /[^.!?]+[.!?]/g
   const takeaways = []
 
+  // 1. Look for explicit bullet points or key takeaways
   for (const line of lines) {
-    const important = line.match(importantPattern)
-    if (important) takeaways.push(toSentenceCase(important[2]))
-
-    const bullet = line.match(bulletPattern)
-    if (bullet) takeaways.push(toSentenceCase(bullet[1]))
+    const bulletMatch = line.match(/^[•\-*]\s*(.+)$/)
+    if (bulletMatch) {
+      const candidate = bulletMatch[1].trim()
+      if (candidate.length >= 18 && candidate.length <= 150) {
+        if (!takeaways.some((t) => t.toLowerCase() === candidate.toLowerCase())) {
+          takeaways.push(toSentenceCase(candidate))
+        }
+      }
+    }
+    if (takeaways.length >= 4) break
   }
 
-  const fullText = lines.join(' ')
-  const sentences = (fullText.match(sentencePattern) || [])
-    .map((s) => s.trim())
-    .filter((s) => s.length >= 18 && s.length <= 180)
-
-  for (const sentence of sentences) {
-    if (takeaways.length >= 6) break
-    takeaways.push(toSentenceCase(sentence))
+  // 2. Fallback: extract strong summary sentences
+  if (takeaways.length < 2) {
+    const sentences = plain.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 25 && s.length <= 150)
+    for (const sent of sentences) {
+      if (takeaways.length >= 3) break
+      if (!takeaways.some((t) => t.toLowerCase() === sent.toLowerCase())) {
+        takeaways.push(toSentenceCase(sent))
+      }
+    }
   }
 
-  const uniqueTakeaways = []
-  for (const point of takeaways) {
-    if (uniqueTakeaways.some((existing) => existing.toLowerCase() === point.toLowerCase())) continue
-    uniqueTakeaways.push(point)
-    if (uniqueTakeaways.length >= 3) break
-  }
+  // 3. Find real conclusion
+  const conclusionSentence = [...lines].reverse().find((l) =>
+    /^(in summary|to summarize|overall|in conclusion|the key takeaway|in short|therefore)/i.test(l)
+  )
 
-  const explicitConclusion = sentences.find((s) => /^(in summary|overall|therefore|to conclude|conclusion)/i.test(s))
-  const fallbackConclusion = topics.length
-    ? `To study this well, start with ${topics[0]}, then move step-by-step through ${topics.slice(1).join(', ')}.`
-    : (sentences[0] || 'Focus on the main concept first, then practice with examples to build confidence.')
+  let conclusion = ''
+  if (conclusionSentence) {
+    conclusion = conclusionSentence.replace(/^[•\-*]\s*/, '').trim()
+  } else if (topics.length >= 2) {
+    conclusion = `Master ${topics[0]} as the foundational step, then explore ${topics.slice(1, 3).join(' and ')} to build end-to-end mastery.`
+  } else {
+    conclusion = 'Review the core concepts above and test your knowledge with interactive practice challenges.'
+  }
 
   return {
-    takeaways: uniqueTakeaways,
-    conclusion: explicitConclusion || fallbackConclusion,
+    takeaways: takeaways.slice(0, 4),
+    conclusion,
   }
+}
+
+function StudyFlowGraph({ topics, messageText = '', onTakeTest }) {
+  if (!topics?.length) return null
+
+  return (
+    <div className="mt-4 overflow-hidden rounded-3xl border border-teal-500/20 bg-linear-to-b from-teal-50/60 via-slate-50/40 to-cyan-50/40 dark:from-slate-900/60 dark:via-slate-900/40 dark:to-teal-950/30 p-4.5 sm:p-5 shadow-xs backdrop-blur-xs">
+      <div className="flex items-center justify-between gap-2 border-b border-teal-500/10 dark:border-slate-800 pb-3">
+        <div className="flex items-center gap-2">
+          <span className="grid h-6 w-6 place-items-center rounded-lg bg-teal-500/10 text-teal-600 dark:text-teal-400">
+            <FiZap className="h-3.5 w-3.5" />
+          </span>
+          <p className="text-xs font-bold uppercase tracking-wider text-teal-800 dark:text-teal-300">
+            Interactive Learning Flow
+          </p>
+        </div>
+        <span className="text-[11px] font-semibold text-slate-400">
+          {topics.length} Key Milestones
+        </span>
+      </div>
+
+      {/* Horizontal roadmap nodes */}
+      <div className="mt-3.5 overflow-x-auto pb-2">
+        <div className="inline-flex min-w-full items-center gap-2.5">
+          {topics.map((topic, index) => (
+            <div key={`${topic}-${index}`} className="inline-flex items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => onTakeTest && onTakeTest(topic)}
+                className="group flex items-center gap-2 rounded-2xl border border-teal-500/20 bg-white dark:bg-slate-800/90 px-3.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-200 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-teal-500 hover:shadow-md hover:text-teal-600 dark:hover:text-teal-400 active:scale-95"
+                title={`Practice test on ${topic}`}
+              >
+                <span className="grid h-5 w-5 place-items-center rounded-full bg-teal-500 text-[10px] font-extrabold text-white shadow-xs">
+                  {index + 1}
+                </span>
+                <span>{topic}</span>
+              </button>
+              {index < topics.length - 1 ? (
+                <span className="text-teal-400 dark:text-teal-600 font-bold">→</span>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Concept Quick Explanations */}
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 pt-2.5 border-t border-teal-500/10 dark:border-slate-800">
+        {topics.slice(0, 4).map((topic, idx) => (
+          <div
+            key={`snippet-${topic}-${idx}`}
+            className="rounded-2xl border border-slate-200/70 dark:border-slate-800/80 bg-white/70 dark:bg-slate-900/60 p-3 shadow-xs"
+          >
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-teal-500" />
+              <p className="text-xs font-bold text-slate-900 dark:text-slate-100">{topic}</p>
+            </div>
+            <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400 line-clamp-2">
+              {getContextualTopicSnippet(topic, messageText)}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function ResponseSummary({ takeaways, conclusion }) {
   if (!takeaways?.length && !conclusion) return null
 
   return (
-    <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Key Takeaways</p>
+    <div className="mt-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 p-4.5 sm:p-5 shadow-xs backdrop-blur-xs">
       {takeaways?.length ? (
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
-          {takeaways.map((point, index) => (
-            <li key={`${index}-${point.slice(0, 24)}`}>{point}</li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mt-2 text-sm text-slate-600">No key takeaways found for this response.</p>
-      )}
+        <div>
+          <div className="flex items-center gap-2 mb-2.5">
+            <span className="grid h-6 w-6 place-items-center rounded-lg bg-teal-500/10 text-teal-600 dark:text-teal-400">
+              <FiCheck className="h-3.5 w-3.5" />
+            </span>
+            <p className="text-xs font-bold uppercase tracking-wider text-teal-800 dark:text-teal-300">
+              Key Takeaways
+            </p>
+          </div>
+          <ul className="space-y-1.5 pl-1">
+            {takeaways.map((point, index) => (
+              <li key={`${index}-${point.slice(0, 24)}`} className="flex items-start gap-2 text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-500" />
+                <span>{point}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
-      <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Conclusion</p>
-      <p className="mt-1 text-sm leading-6 text-slate-700">{conclusion}</p>
+      {conclusion && (
+        <div className={`${takeaways?.length ? 'mt-3.5 pt-3 border-t border-slate-100 dark:border-slate-800' : ''}`}>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+            Executive Summary
+          </p>
+          <p className="text-xs font-medium leading-relaxed text-slate-700 dark:text-slate-300">
+            {conclusion}
+          </p>
+        </div>
+      )}
     </div>
   )
 }
 
-function StudyFlowGraph({ topics, flowStyle = 'conceptual' }) {
-  if (!topics?.length) return null
-
-  const flowPalette = {
-    coding: 'border-indigo-200 bg-indigo-50',
-    comparison: 'border-amber-200 bg-amber-50',
-    'problem-solving': 'border-rose-200 bg-rose-50',
-    process: 'border-sky-200 bg-sky-50',
-    exam: 'border-emerald-200 bg-emerald-50',
-    definition: 'border-violet-200 bg-violet-50',
-    conceptual: 'border-teal-200 bg-teal-50',
+function InteractiveCodeSnippet({ codeText }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = () => {
+    if (!codeText.trim()) return
+    navigator.clipboard?.writeText(codeText)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
-  const nodeTone = flowPalette[flowStyle] || flowPalette.conceptual
+
+  const isPython = /(?:def\s+|import\s+|print\s*\(|class\s+)/.test(codeText)
+  const isJs = /(?:const\s+|let\s+|var\s+|function\s+|console\.log)/.test(codeText)
+  const langLabel = isPython ? 'Python' : isJs ? 'JavaScript' : 'Code'
 
   return (
-    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Important Topics</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {topics.slice(0, 4).map((topic) => (
-          <span key={topic} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700">
-            {topic}
-          </span>
-        ))}
+    <div className="my-3 overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-900 shadow-md">
+      <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950/70 px-4 py-2 text-xs">
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-teal-400">
+          {langLabel}
+        </span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-[11px] font-medium text-slate-300 transition-all hover:bg-slate-700 hover:text-white active:scale-95"
+          title="Copy snippet"
+        >
+          {copied ? (
+            <>
+              <FiCheck className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="text-emerald-400 font-semibold">Copied!</span>
+            </>
+          ) : (
+            <>
+              <FiCopy className="h-3.5 w-3.5" />
+              <span>Copy</span>
+            </>
+          )}
+        </button>
       </div>
-
-      <div className="mt-2 space-y-1">
-        {topics.slice(0, 3).map((topic) => (
-          <p key={`${topic}-meaning`} className="text-xs text-slate-600">
-            <span className="font-semibold text-slate-700">{topic}:</span> {getTopicMeaning(topic)}
-          </p>
-        ))}
-      </div>
-
-      <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Study Flow Graph</p>
-      <div className="mt-2 overflow-x-auto pb-1">
-        <div className="inline-flex min-w-full items-center gap-2">
-          {topics.map((topic, index) => (
-            <div key={`${topic}-${index}`} className="inline-flex items-center gap-2">
-              <div className={`rounded-xl border px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm ${nodeTone}`}>
-                {topic}
-              </div>
-              {index < topics.length - 1 ? <span className="text-slate-400">→</span> : null}
-            </div>
-          ))}
-        </div>
-      </div>
+      <pre className="overflow-x-auto p-4 text-[0.88em] leading-relaxed text-slate-100 font-mono">
+        <code>{codeText}</code>
+      </pre>
     </div>
   )
 }
@@ -751,7 +600,7 @@ function renderAssistantMessage(text) {
         h2: ({ children }) => <h2 className="text-xl font-semibold leading-tight text-slate-900">{children}</h2>,
         h3: ({ children }) => <h3 className="text-lg font-semibold leading-snug text-slate-800">{children}</h3>,
         strong: ({ children }) => <strong className="font-bold text-slate-900">{children}</strong>,
-        code: ({ inline, className, children }) => {
+        code: ({ inline, children }) => {
           if (inline) {
             return <code className="rounded bg-slate-100 px-1 py-0.5 text-[0.85em] text-slate-700">{children}</code>
           }
@@ -769,40 +618,12 @@ function renderAssistantMessage(text) {
 
           if (!shouldUseFullCodeBox(codeText)) {
             return (
-              <pre className="overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[0.9em] leading-7 text-slate-700">
+              <pre className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 px-3 py-2 text-[0.9em] leading-7 text-slate-700 dark:text-slate-300 font-mono">
                 <code>{codeText.trim()}</code>
               </pre>
             )
           }
-          const handleCopy = () => {
-            if (!codeText.trim()) return
-            navigator.clipboard?.writeText(codeText)
-          }
-          return (
-            <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
-              <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2 text-xs text-slate-300">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleCopy}
-                    className="rounded-full border border-slate-700 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
-                  >
-                    <FiCopy className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    className="flex items-center gap-1 rounded-full border border-slate-700 px-2.5 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
-                  >
-                    <FiPlay className="h-3.5 w-3.5" />
-                    Run
-                  </button>
-                </div>
-              </div>
-              <pre className="overflow-x-auto p-4 text-[0.85em] leading-relaxed text-slate-100">
-                <code>{codeText}</code>
-              </pre>
-            </div>
-          )
+          return <InteractiveCodeSnippet codeText={codeText} />
         },
         pre: ({ children }) => <>{children}</>,
         a: ({ children, href }) => (
@@ -841,31 +662,31 @@ function DashboardPage({ size }) {
   const [isGenerating, setIsGenerating] = useState(false)
   const [regeneratingMessageId, setRegeneratingMessageId] = useState(null)
   const [inputValue, setInputValue] = useState('')
-  const [selectedModelId, setSelectedModelId] = useState('gemini-2.5-flash')
+  const [selectedModelId, setSelectedModelId] = useState('gemini-3.5-flash')
   const [audioFile, setAudioFile] = useState(null)
   const [attachedFiles, setAttachedFiles] = useState([])
   const [isFollowing, setIsFollowing] = useState(true)
+  const [copiedId, setCopiedId] = useState(null)
+  const [speakingId, setSpeakingId] = useState(null)
+  const [messageReactions, setMessageReactions] = useState({})
   const listRef = useRef(null)
-  const latestUserRef = useRef(null)
+  const messagesEndRef = useRef(null)
   const typingTimerRef = useRef(null)
   const historyLoadedRef = useRef(false)
 
-  // Index of the last user message
-  const lastUserIdx = messages.reduce((acc, m, i) => (m.role === 'user' ? i : acc), -1)
-
-  // Scroll latest user message to top of container with a viewport-relative offset
-  const scrollToUser = () => {
-    const el = listRef.current
-    const target = latestUserRef.current
-    if (!el || !target) return
-    const offset = Math.min(25, Math.max(70, window.innerHeight * 0.25))
-    el.scrollTo({ top: target.offsetTop - offset, behavior: 'smooth' })
+  // Scroll smoothly to the bottom of the conversation
+  const scrollToBottom = (behavior = 'smooth') => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior, block: 'end' })
+    } else if (listRef.current) {
+      listRef.current.scrollTo({ top: listRef.current.scrollHeight, behavior })
+    }
   }
 
   useEffect(() => {
     if (!isFollowing) return
-    scrollToUser()
-  }, [messages])
+    scrollToBottom('smooth')
+  }, [messages, isFollowing])
 
   useEffect(() => {
     return () => {
@@ -997,12 +818,17 @@ function DashboardPage({ size }) {
     const el = listRef.current
     if (!el) return
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    setIsFollowing(distanceFromBottom <= 48)
+    // If user scrolled up by more than 80px, stop auto-scrolling
+    if (distanceFromBottom > 80) {
+      setIsFollowing(false)
+    } else if (distanceFromBottom < 30) {
+      setIsFollowing(true)
+    }
   }
 
   const scrollToLatest = () => {
-    scrollToUser()
     setIsFollowing(true)
+    scrollToBottom('smooth')
   }
 
   const copyToClipboard = async (value = '') => {
@@ -1023,9 +849,68 @@ function DashboardPage({ size }) {
     }
   }
 
-  const handleCopyResponse = async (assistantText) => {
+  const handleCopyResponse = async (messageId, assistantText) => {
     await copyToClipboard(assistantText)
+    setCopiedId(messageId)
+    setTimeout(() => setCopiedId((curr) => (curr === messageId ? null : curr)), 2000)
   }
+
+  const handleToggleSpeak = (messageId, text) => {
+    if (!('speechSynthesis' in window)) {
+      alert('Text-to-speech is not supported in this browser.')
+      return
+    }
+    if (speakingId === messageId) {
+      window.speechSynthesis.cancel()
+      setSpeakingId(null)
+      return
+    }
+    window.speechSynthesis.cancel()
+    const plainText = text.replace(/[`*#_~[\]()]/g, '').slice(0, 1200)
+    const utterance = new SpeechSynthesisUtterance(plainText)
+    utterance.onend = () => setSpeakingId(null)
+    utterance.onerror = () => setSpeakingId(null)
+    setSpeakingId(messageId)
+    window.speechSynthesis.speak(utterance)
+  }
+
+  const handleReaction = (messageId, type) => {
+    setMessageReactions((prev) => ({
+      ...prev,
+      [messageId]: prev[messageId] === type ? null : type,
+    }))
+  }
+
+  const starterPrompts = [
+    {
+      icon: <FiZap className="h-5 w-5 text-amber-500" />,
+      title: 'Explain Concepts',
+      desc: 'Explain Dynamic Programming with intuitive examples',
+      prompt: 'Explain Dynamic Programming with intuitive real-world examples and Python snippets.',
+      category: 'Algorithms',
+    },
+    {
+      icon: <FiCode className="h-5 w-5 text-teal-500" />,
+      title: 'Python Sandbox',
+      desc: 'Write and test a Binary Search tree in Python',
+      prompt: 'Write a complete Python implementation of a Binary Search Tree with insert, search, and traverse methods.',
+      category: 'Data Structures',
+    },
+    {
+      icon: <FiBookOpen className="h-5 w-5 text-indigo-500" />,
+      title: 'Prepare Exam Questions',
+      desc: 'Create 5 practice questions for Operating Systems',
+      prompt: 'Create 5 challenging multiple-choice questions on Operating Systems (Deadlocks & Memory Management) with answers and explanations.',
+      category: 'Exam Prep',
+    },
+    {
+      icon: <FiHelpCircle className="h-5 w-5 text-emerald-500" />,
+      title: 'System Design Basics',
+      desc: 'How does load balancing and caching work?',
+      prompt: 'Explain how Load Balancing and Redis Caching work together in scalable web architectures.',
+      category: 'System Design',
+    },
+  ]
 
   const handleTakeTest = (topic) => {
     const trimmed = String(topic || '').trim()
@@ -1355,8 +1240,47 @@ function DashboardPage({ size }) {
         className="min-h-0 flex-1 overflow-y-auto"
       >
         {messages.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-center px-4">
-            <ChatBody variant="landing" size={size} />
+          <div className="flex h-full flex-col items-center justify-center text-center px-4 py-8 max-w-3xl mx-auto animate-fade-in select-none">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-teal-500/20 bg-teal-50/80 dark:bg-teal-950/30 px-3.5 py-1 text-xs font-semibold text-teal-700 dark:text-teal-300 shadow-xs">
+              <RiSparklingFill className="h-3.5 w-3.5 text-teal-500 animate-pulse" />
+              AI Learning Companion
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              How can I help you study today?
+            </h1>
+            <p className="mt-2 text-sm sm:text-base text-slate-600 dark:text-slate-400 max-w-lg">
+              Ask deep questions, run code, generate customized MCQ & coding tests, or practice mock interviews.
+            </p>
+
+            <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full text-left">
+              {starterPrompts.map((item, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    setInputValue(item.prompt)
+                  }}
+                  className="group flex flex-col justify-between rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 p-4 shadow-xs backdrop-blur-xs transition-all duration-200 hover:-translate-y-1 hover:border-teal-500/40 hover:shadow-md active:scale-98"
+                >
+                  <div className="flex items-start justify-between">
+                    <span className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 dark:bg-slate-800 transition-transform group-hover:scale-110">
+                      {item.icon}
+                    </span>
+                    <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                      {item.category}
+                    </span>
+                  </div>
+                  <div className="mt-3">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">
+                      {item.title}
+                    </h3>
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                      {item.desc}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
           <div className="mx-auto w-full max-w-4xl px-4 py-6 space-y-6">
@@ -1365,45 +1289,38 @@ function DashboardPage({ size }) {
                 type="button"
                 onClick={handleDeleteChat}
                 disabled={!messages.length || isGenerating || Boolean(regeneratingMessageId)}
-                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium ${t.actionBtn}`}
+                className={`inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all hover:scale-105 active:scale-95 ${t.actionBtn}`}
                 title="Delete current chat"
                 aria-label="Delete current chat"
               >
-                <FiTrash2 className="h-4 w-4" />
+                <FiTrash2 className="h-3.5 w-3.5" />
                 Delete Chat
               </button>
               <button
                 type="button"
                 onClick={handleDownloadEntireChatPdf}
-                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium ${t.actionBtn}`}
+                className={`inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all hover:scale-105 active:scale-95 ${t.actionBtn}`}
               >
-                <FiDownload className="h-4 w-4" />
-                Download Chat PDF
+                <FiDownload className="h-3.5 w-3.5" />
+                Download PDF
               </button>
             </div>
 
             {messages.map((message, index) => {
-              const isLastUser = message.role === 'user' && index === lastUserIdx
-              const isLastMsg = index === messages.length - 1
               const previousUserMessage = message.role === 'assistant'
                 ? [...messages.slice(0, index)].reverse().find((item) => item.role === 'user')
                 : null
               const suggestedTopics = message.role === 'assistant'
                 ? suggestStudyTopics(message.text, previousUserMessage?.text || '')
                 : []
-              const flowStyle = message.role === 'assistant'
-                ? detectQuestionStyle(previousUserMessage?.text || '', message.text)
-                : 'conceptual'
               const summary = message.role === 'assistant' ? summarizeLearningPoints(message.text, suggestedTopics) : null
               return (
                 <div
                   key={message.id}
-                  ref={isLastUser ? latestUserRef : null}
-                  style={isLastMsg && message.role === 'assistant' ? { minHeight: 'calc(100svh - 200px)' } : {}}
                 >
                   {message.role === 'user' ? (
-                    <div className="flex justify-end">
-                      <div className={`max-w-[96%] -mr-5 rounded-2xl px-5 py-3 text-sm leading-6 ${t.userMsgBg} ${t.userMsgText}`}>
+                    <div className="flex justify-end animate-slide-up">
+                      <div className={`max-w-[96%] -mr-5 rounded-2xl px-5 py-3 text-sm leading-6 shadow-xs ${t.userMsgBg} ${t.userMsgText}`}>
                         {message.text && <p>{message.text}</p>}
                         {message.files?.length > 0 && (
                           <div className={`${message.text ? 'mt-2' : ''} flex flex-wrap gap-2`}>
@@ -1438,19 +1355,23 @@ function DashboardPage({ size }) {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-start gap-3 animate-fade-in">
                       <div className="mt-0.5 shrink-0 text-teal-500">
                         <RiSparklingFill className="h-5 w-5" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div
-                          className={`w-full max-w-[96%] rounded-2xl border px-5 py-3 shadow-sm ${t.inputContainer}`}
+                          className={`w-full max-w-[96%] rounded-2xl border px-5 py-3.5 shadow-sm transition-all ${t.inputContainer}`}
                           style={{ marginLeft: '-37px' }}
                         >
                           <div className={`assistant-markdown space-y-3 text-sm leading-7 ${t.assistantText}`}>
                             {renderAssistantMessage(message.text)}
                           </div>
-                          <StudyFlowGraph topics={suggestedTopics} flowStyle={flowStyle} />
+                          <StudyFlowGraph
+                            topics={suggestedTopics}
+                            messageText={message.text}
+                            onTakeTest={handleTakeTest}
+                          />
                           <ResponseSummary takeaways={summary?.takeaways} conclusion={summary?.conclusion} />
                           {suggestedTopics.length ? (
                             <div className="mt-4 flex flex-wrap gap-2">
@@ -1459,7 +1380,7 @@ function DashboardPage({ size }) {
                                   key={`test-${topic}`}
                                   type="button"
                                   onClick={() => handleTakeTest(topic)}
-                                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${t.inputBtnBg} ${t.inputBtn}`}
+                                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-all hover:scale-105 active:scale-95 ${t.inputBtnBg} ${t.inputBtn}`}
                                 >
                                   Take test: {topic}
                                 </button>
@@ -1467,36 +1388,104 @@ function DashboardPage({ size }) {
                             </div>
                           ) : null}
                         </div>
-                        <div className="mt-3 flex items-center gap-3">
-                          <button className={`rounded p-1 ${t.actionBtn}`}><FiThumbsUp className="h-4 w-4" /></button>
-                          <button className={`rounded p-1 ${t.actionBtn}`}><FiThumbsDown className="h-4 w-4" /></button>
+                        <div className="mt-3 flex items-center gap-2 text-xs flex-wrap">
+                          {/* Thumbs Up */}
+                          <button
+                            type="button"
+                            onClick={() => handleReaction(message.id, 'like')}
+                            className={`flex items-center gap-1 rounded-lg px-2.5 py-1 transition-all active:scale-90 ${
+                              messageReactions[message.id] === 'like'
+                                ? 'bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300 font-semibold'
+                                : t.actionBtn
+                            }`}
+                            title="Helpful response"
+                          >
+                            <FiThumbsUp className="h-3.5 w-3.5" />
+                          </button>
+
+                          {/* Thumbs Down */}
+                          <button
+                            type="button"
+                            onClick={() => handleReaction(message.id, 'dislike')}
+                            className={`flex items-center gap-1 rounded-lg px-2.5 py-1 transition-all active:scale-90 ${
+                              messageReactions[message.id] === 'dislike'
+                                ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 font-semibold'
+                                : t.actionBtn
+                            }`}
+                            title="Not helpful"
+                          >
+                            <FiThumbsDown className="h-3.5 w-3.5" />
+                          </button>
+
+                          {/* Speak Aloud TTS */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSpeak(message.id, message.text)}
+                            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition-all active:scale-90 ${
+                              speakingId === message.id
+                                ? 'bg-teal-500 text-white shadow-xs animate-pulse font-semibold'
+                                : t.actionBtn
+                            }`}
+                            title={speakingId === message.id ? 'Stop reading' : 'Read aloud'}
+                          >
+                            {speakingId === message.id ? (
+                              <>
+                                <FiVolumeX className="h-3.5 w-3.5" />
+                                <span>Stop</span>
+                              </>
+                            ) : (
+                              <>
+                                <FiVolume2 className="h-3.5 w-3.5" />
+                                <span>Listen</span>
+                              </>
+                            )}
+                          </button>
+
+                          {/* Regenerate */}
                           <button
                             type="button"
                             onClick={() => handleRegenerateResponse(message.id)}
-                            className={`rounded p-1 ${t.actionBtn}`}
+                            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition-all active:scale-90 ${t.actionBtn}`}
                             title="Regenerate this response"
-                            aria-label="Regenerate this response"
                             disabled={Boolean(regeneratingMessageId) || isGenerating}
                           >
-                            <FiRefreshCw className={`h-4 w-4 ${regeneratingMessageId === message.id ? 'animate-spin' : ''}`} />
+                            <FiRefreshCw className={`h-3.5 w-3.5 ${regeneratingMessageId === message.id ? 'animate-spin' : ''}`} />
+                            <span>Retry</span>
                           </button>
+
+                          {/* Copy */}
                           <button
                             type="button"
-                            onClick={() => handleCopyResponse(message.text)}
-                            className={`rounded p-1 ${t.actionBtn}`}
+                            onClick={() => handleCopyResponse(message.id, message.text)}
+                            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition-all active:scale-90 ${
+                              copiedId === message.id
+                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-semibold'
+                                : t.actionBtn
+                            }`}
                             title="Copy response"
-                            aria-label="Copy response"
                           >
-                            <FiCopy className="h-4 w-4" />
+                            {copiedId === message.id ? (
+                              <>
+                                <FiCheck className="h-3.5 w-3.5 text-emerald-500" />
+                                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Copied!</span>
+                              </>
+                            ) : (
+                              <>
+                                <FiCopy className="h-3.5 w-3.5" />
+                                <span>Copy</span>
+                              </>
+                            )}
                           </button>
+
+                          {/* Download PDF */}
                           <button
                             type="button"
                             onClick={() => handleDownloadSingleResponsePdf(message.id)}
-                            className={`rounded p-1 ${t.actionBtn}`}
+                            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition-all active:scale-90 ${t.actionBtn}`}
                             title="Download this response as PDF"
-                            aria-label="Download this response as PDF"
                           >
-                            <FiDownload className="h-4 w-4" />
+                            <FiDownload className="h-3.5 w-3.5" />
+                            <span>PDF</span>
                           </button>
                         </div>
                       </div>
@@ -1524,6 +1513,7 @@ function DashboardPage({ size }) {
                 </div>
               </div>
             ) : null}
+            <div ref={messagesEndRef} className="h-4 w-full pointer-events-none" />
           </div>
         )}
       </div>

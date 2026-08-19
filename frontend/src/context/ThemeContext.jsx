@@ -1,19 +1,11 @@
 import { createContext, useContext, useMemo, useState } from 'react'
+import { LANGUAGE_OPTIONS } from './themeConstants.js'
 
 const THEME_STORAGE_KEY = 'ta-theme'
 const LANGUAGE_STORAGE_KEY = 'ta-language'
 
 const DEFAULT_THEME = 'light'
 const DEFAULT_LANGUAGE = 'English'
-
-export const LANGUAGE_OPTIONS = [
-  'English',
-  'Tamil',
-  'Hindi',
-  'French',
-  'Spanish',
-  'German',
-]
 
 function getInitialTheme() {
   const stored = window.localStorage.getItem(THEME_STORAGE_KEY)
@@ -27,7 +19,7 @@ function getInitialLanguage() {
 
 const ThemeContext = createContext(null)
 
-export const themes = {
+const themes = {
   light: {
     // Page / root
     pageBg: 'bg-linear-to-b from-white via-teal-50 to-teal-100',

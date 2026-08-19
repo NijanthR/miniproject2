@@ -12,6 +12,8 @@ body {
 	margin: 0;
 	font-family: "Spline Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
 	font-feature-settings: "ss01" 1, "ss02" 1, "cv11" 1;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 
 :root {
@@ -23,6 +25,27 @@ body {
 	letter-spacing: -0.01em;
 }
 
+/* Custom Smooth Scrollbars */
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: rgba(148, 163, 184, 0.35);
+	border-radius: 9999px;
+	transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: rgba(20, 184, 166, 0.6);
+}
+
+/* Math Rendering */
 .assistant-markdown .katex {
 	font-size: 1.08em;
 }
@@ -33,3 +56,110 @@ body {
 	padding: 0.25rem 0;
 	margin: 0.5rem 0;
 }
+
+/* Micro-interaction & Animation Keyframes */
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes slideInUp {
+	from {
+		opacity: 0;
+		transform: translateY(16px) scale(0.98);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+
+@keyframes pulseGlow {
+	0%, 100% {
+		box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.4);
+	}
+	50% {
+		box-shadow: 0 0 0 8px rgba(20, 184, 166, 0);
+	}
+}
+
+@keyframes audioWave {
+	0%, 100% {
+		height: 6px;
+	}
+	50% {
+		height: 22px;
+	}
+}
+
+@keyframes shimmer {
+	0% {
+		background-position: -200% 0;
+	}
+	100% {
+		background-position: 200% 0;
+	}
+}
+
+@keyframes floatSlow {
+	0%, 100% {
+		transform: translateY(0px);
+	}
+	50% {
+		transform: translateY(-4px);
+	}
+}
+
+.animate-fade-in {
+	animation: fadeIn 0.25s ease-out forwards;
+}
+
+.animate-slide-up {
+	animation: slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-pulse-glow {
+	animation: pulseGlow 2s infinite;
+}
+
+.animate-float {
+	animation: floatSlow 3s ease-in-out infinite;
+}
+
+/* Glassmorphism helpers */
+.glass-card {
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+}
+
+.interactive-hover {
+	transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.interactive-hover:hover {
+	transform: translateY(-2px);
+}
+
+.interactive-press:active {
+	transform: scale(0.97);
+}
+
+/* Audio Recording Waves */
+.waveform-bar {
+	width: 3px;
+	border-radius: 9999px;
+	background: #14b8a6;
+	animation: audioWave 1s ease-in-out infinite;
+}
+.waveform-bar:nth-child(1) { animation-delay: 0.1s; }
+.waveform-bar:nth-child(2) { animation-delay: 0.3s; }
+.waveform-bar:nth-child(3) { animation-delay: 0.5s; }
+.waveform-bar:nth-child(4) { animation-delay: 0.2s; }
+.waveform-bar:nth-child(5) { animation-delay: 0.4s; }
+.waveform-bar:nth-child(6) { animation-delay: 0.6s; }

@@ -26,6 +26,7 @@ from litellm import RateLimitError, completion
 from .models import CommunityMessage
 
 MODEL_REGISTRY = {
+	'gemini-3.5-flash': {'provider': 'google', 'model': 'gemini/gemini-3.5-flash'},
 	'gemini-2.5-pro': {'provider': 'google', 'model': 'gemini/gemini-2.5-pro'},
 	'gemini-2.5-flash': {'provider': 'google', 'model': 'gemini/gemini-2.5-flash'},
 	'gemini-2.0-flash': {'provider': 'google', 'model': 'gemini/gemini-2.0-flash'},
@@ -64,7 +65,7 @@ GROQ_WHISPER_MODEL = os.getenv('GROQ_WHISPER_MODEL', 'whisper-large-v3')
 MAX_HISTORY_MESSAGES = int(os.getenv('MAX_CHAT_HISTORY_MESSAGES', '12'))
 MAX_STORED_MESSAGES_PER_CONVERSATION = int(os.getenv('MAX_STORED_MESSAGES_PER_CONVERSATION', '200'))
 MAX_IN_MEMORY_CONVERSATIONS = int(os.getenv('MAX_IN_MEMORY_CONVERSATIONS', '500'))
-TEST_GENERATION_MODEL = os.getenv('TEST_GENERATION_MODEL', 'gemini-2.5-flash')
+TEST_GENERATION_MODEL = os.getenv('TEST_GENERATION_MODEL', 'gemini-3.5-flash')
 MAX_TEST_QUESTIONS = int(os.getenv('MAX_TEST_QUESTIONS', '30'))
 MAX_CODING_TEST_CASES = int(os.getenv('MAX_CODING_TEST_CASES', '20'))
 CODE_RUN_TIMEOUT_SECONDS = int(os.getenv('CODE_RUN_TIMEOUT_SECONDS', '8'))
@@ -242,6 +243,25 @@ def _decode_data_url(data_url):
 		return None, None
 
 
+def _audio_suffix_from_mime(mime):
+	value = str(mime or '').strip().lower()
+	if not value:
+		return '.webm'
+	if 'webm' in value:
+		return '.webm'
+	if 'ogg' in value or 'opus' in value:
+		return '.ogg'
+	if 'mpeg' in value or 'mp3' in value:
+		return '.mp3'
+	if 'wav' in value:
+		return '.wav'
+	if 'flac' in value:
+		return '.flac'
+	if 'mp4' in value or 'm4a' in value or 'aac' in value:
+		return '.m4a'
+	return '.webm'
+
+
 def _decode_json_response(raw_bytes):
 	try:
 		return json.loads((raw_bytes or b'').decode('utf-8'))
@@ -412,7 +432,7 @@ def _transcribe_audio_groq(audio, api_key):
 	except Exception as exc:
 		raise ValueError('Groq transcription requires the openai package. Install it in backend requirements.') from exc
 
-	suffix = '.webm' if (mime or '').endswith('webm') else '.wav'
+	suffix = _audio_suffix_from_mime(mime)
 	audio_file = io.BytesIO(data)
 	audio_file.name = f'audio{suffix}'
 
@@ -453,7 +473,7 @@ def _transcribe_audio_local(audio):
 		raise ValueError('Local transcription not available. Install faster-whisper and ffmpeg.') from exc
 	model_name = os.getenv('LOCAL_WHISPER_MODEL', 'base')
 	# Use a temp file since faster-whisper expects a file path.
-	suffix = '.webm' if (mime or '').endswith('webm') else '.wav'
+	suffix = _audio_suffix_from_mime(mime)
 	with tempfile.NamedTemporaryFile(delete=True, suffix=suffix) as tmp:
 		tmp.write(data)
 		tmp.flush()
@@ -914,13 +934,33 @@ def chat(request):
 			return JsonResponse({'error': 'Selected model does not support images.'}, status=400)
 
 		if audio:
+			transcription_errors = []
+
 			groq_api_key = (PROVIDER_KEYS.get('groq') or '').strip()
-			if not groq_api_key:
-				return JsonResponse({'error': 'Missing GROQ_API_KEY (or groq_api_key) in backend .env.'}, status=500)
-			try:
-				transcript = _transcribe_audio_groq(audio, groq_api_key)
-			except ValueError as exc:
-				return JsonResponse({'error': str(exc)}, status=400)
+			if groq_api_key:
+				try:
+					transcript = _transcribe_audio_groq(audio, groq_api_key)
+				except ValueError as exc:
+					transcription_errors.append(str(exc))
+
+			if not transcript:
+				hf_api_key = (PROVIDER_KEYS.get('huggingface') or '').strip()
+				if hf_api_key:
+					try:
+						transcript = _transcribe_audio(audio, hf_api_key)
+					except ValueError as exc:
+						transcription_errors.append(str(exc))
+
+			if not transcript:
+				try:
+					transcript = _transcribe_audio_local(audio)
+				except ValueError as exc:
+					transcription_errors.append(str(exc))
+
+			if not transcript and not message and not images and not documents:
+				details = ' | '.join(err for err in transcription_errors if err) or 'Unable to transcribe audio.'
+				return JsonResponse({'error': 'Audio transcription failed.', 'details': details}, status=400)
+
 			if transcript:
 				# If audio is present, use Whisper transcript as the sole text input.
 				message = transcript.strip()
@@ -1038,10 +1078,10 @@ def chat(request):
 			else:
 				reply = str(reply_content or '').strip()
 		except RateLimitError as exc:
-			if config['provider'] == 'google' and config['model'] != 'gemini/gemini-2.5-flash':
+			if config['provider'] == 'google' and config['model'] != 'gemini/gemini-3.5-flash':
 				fallback_request_kwargs = {
 					**request_kwargs,
-					'model': 'gemini/gemini-2.5-flash',
+					'model': 'gemini/gemini-3.5-flash',
 				}
 				try:
 					response = _complete_with_google_fallback(fallback_request_kwargs, google_keys)
@@ -1053,8 +1093,8 @@ def chat(request):
 						).strip()
 					else:
 						reply = str(reply_content or '').strip()
-					response_model = 'gemini/gemini-2.5-flash'
-					fallback_notice = 'Selected Gemini model hit quota; used gemini-2.5-flash instead.'
+					response_model = 'gemini/gemini-3.5-flash'
+					fallback_notice = 'Selected Gemini model hit quota; used gemini-3.5-flash instead.'
 				except RateLimitError:
 					pass
 				except Exception:

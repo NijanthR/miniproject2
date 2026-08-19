@@ -12,7 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 import os
 from pathlib import Path
-
+import dj_database_url
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -25,21 +25,36 @@ load_dotenv(BASE_DIR / '.env')
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY') or 'django-insecure-change-me'
+SECRET_KEY = os.getenv('SECRET_KEY') or 'django-insecure-change-me-for-production'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
-raw_hosts = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1')
-ALLOWED_HOSTS = [host.strip() for host in raw_hosts.split(',') if host.strip()]
+# Allowed hosts configuration (automatic Render support)
+hosts_env = os.getenv('ALLOWED_HOSTS', '')
+parsed_hosts = [h.strip() for h in hosts_env.split(',') if h.strip()]
+
+if DEBUG and not parsed_hosts:
+    ALLOWED_HOSTS = ['*']
+else:
+    ALLOWED_HOSTS = [
+        'localhost',
+        '127.0.0.1',
+        '.onrender.com',
+        '.vercel.app',
+    ] + parsed_hosts
+
+render_hostname = os.getenv('RENDER_EXTERNAL_HOSTNAME')
+if render_hostname and render_hostname not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(render_hostname)
 
 
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     'corsheaders',
     'api',
-    'daphne',
     'channels',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -52,6 +67,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -82,14 +98,21 @@ ASGI_APPLICATION = 'backend.asgi.application'
 
 
 # Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
+# Uses PostgreSQL if DATABASE_URL is set (Render Postgres), otherwise SQLite fallback
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+database_url = os.getenv('DATABASE_URL')
+if database_url:
+    DATABASES['default'] = dj_database_url.config(
+        default=database_url,
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 
 
 # Password validation
@@ -126,19 +149,34 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-default_cors_origins = 'http://localhost:5173,http://127.0.0.1:5173,https://miniproject2-alpha-one.vercel.app'
-cors_origins = os.getenv('CORS_ALLOWED_ORIGINS', default_cors_origins)
-CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins.split(',') if origin.strip()]
+# CORS & CSRF Settings for Vercel and Render
+CORS_ALLOW_ALL_ORIGINS = os.getenv('CORS_ALLOW_ALL_ORIGINS', 'False').lower() == 'true'
 
-csrf_trusted_origins = os.getenv('CSRF_TRUSTED_ORIGINS', 'https://miniproject2-alpha-one.vercel.app')
-CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in csrf_trusted_origins.split(',') if origin.strip()]
+default_cors = 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000'
+custom_cors = os.getenv('CORS_ALLOWED_ORIGINS', '')
+combined_cors = [c.strip() for c in (default_cors + ',' + custom_cors).split(',') if c.strip()]
+CORS_ALLOWED_ORIGINS = combined_cors
+
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.vercel\.app$",
+    r"^https://.*\.onrender\.com$",
+]
+
+custom_csrf = os.getenv('CSRF_TRUSTED_ORIGINS', '')
+parsed_csrf = [c.strip() for c in custom_csrf.split(',') if c.strip()]
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.vercel.app',
+    'https://*.onrender.com',
+] + parsed_csrf
 
 CHANNEL_LAYERS = {
     'default': {

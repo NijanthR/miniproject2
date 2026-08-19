@@ -1,5 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
+import {
+  FiAward,
+  FiCheck,
+  FiCheckCircle,
+  FiCode,
+  FiCopy,
+  FiCpu,
+  FiHelpCircle,
+  FiPlay,
+  FiRefreshCw,
+  FiRotateCcw,
+  FiXCircle,
+  FiZap,
+} from 'react-icons/fi'
 import { useTheme } from '../context/ThemeContext.jsx'
 import { buildApiUrl } from '../config/api.js'
 
@@ -66,7 +80,7 @@ async function requestGeneratedMcqQuestionsViaChat(topic, level, count) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       message: prompt,
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.5-flash',
       save_history: false,
     }),
   })
@@ -227,7 +241,7 @@ async function requestGeneratedCodingChallengeViaChat(topic, difficulty) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       message: prompt,
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.5-flash',
       save_history: false,
     }),
   })
@@ -318,7 +332,7 @@ async function requestCodingSolution(challenge, topic, difficulty) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       message: prompt,
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.5-flash',
       save_history: false,
     }),
   })
@@ -363,35 +377,45 @@ function CodingComponent({
   const hiddenTests = Array.isArray(challenge?.hidden_test_cases) ? challenge.hidden_test_cases : []
 
   return (
-    <section className={`mt-8 rounded-2xl border px-5 py-5 shadow-sm ${t.inputContainer}`}>
-      <h2 className={`text-lg font-semibold ${t.assistantText}`}>Coding Section</h2>
+    <section className={`mt-8 rounded-3xl border px-5 py-6 shadow-md backdrop-blur-md transition-all sm:px-7 ${t.inputContainer}`}>
+      <div className="flex items-center gap-2">
+        <span className="grid h-8 w-8 place-items-center rounded-xl bg-teal-500 text-white shadow-xs">
+          <FiCode className="h-4 w-4" />
+        </span>
+        <h2 className={`text-xl font-bold ${t.assistantText}`}>Coding Arena</h2>
+      </div>
       <p className={`mt-1 text-sm ${t.assistantText}`}>
-        Topic: <span className="font-semibold">{topic}</span>
+        Topic: <span className="font-bold text-teal-600 dark:text-teal-400">{topic}</span>
       </p>
 
-      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border bg-white/60 px-4 py-3 dark:bg-black/10">
-        <p className={`text-xs font-semibold uppercase tracking-wide ${t.assistantText}`}>Difficulty</p>
-        <div className="grid grid-cols-3 gap-2 rounded-xl border bg-white/70 p-1 dark:bg-slate-900/30">
-          {LEVEL_ORDER.map((level) => (
-            <button
-              key={level}
-              type="button"
-              onClick={() => onCodingDifficultyChange(level)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold capitalize ${
-                codingDifficulty === level ? 'bg-teal-500 text-white' : `${t.inputBtnBg} ${t.inputBtn}`
-              }`}
-            >
-              {level}
-            </button>
-          ))}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white/70 px-4 py-3 shadow-xs dark:border-slate-800 dark:bg-slate-900/40">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Difficulty:</span>
+          <div className="inline-flex shrink-0 items-center rounded-xl border border-slate-200/80 bg-slate-100/90 p-1 dark:border-slate-800 dark:bg-slate-900/80">
+            {LEVEL_ORDER.map((level) => (
+              <button
+                key={level}
+                type="button"
+                onClick={() => onCodingDifficultyChange(level)}
+                className={`rounded-lg px-3.5 py-1.5 text-xs font-bold capitalize transition-all duration-150 ${
+                  codingDifficulty === level
+                    ? 'bg-linear-to-tr from-teal-600 to-teal-500 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
+                }`}
+              >
+                {level}
+              </button>
+            ))}
+          </div>
         </div>
         <button
           type="button"
           onClick={onGenerateChallenge}
           disabled={isGeneratingChallenge}
-          className={`rounded-full px-4 py-2 text-xs font-semibold ${t.inputBtnBg} ${t.inputBtn}`}
+          className="flex items-center gap-2 rounded-xl bg-linear-to-tr from-teal-600 to-teal-500 px-5 py-2 text-xs font-bold text-white shadow-md shadow-teal-500/25 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
         >
-          {isGeneratingChallenge ? 'Generating...' : 'Generate Challenge'}
+          <FiRefreshCw className={`h-3.5 w-3.5 ${isGeneratingChallenge ? 'animate-spin' : ''}`} />
+          <span>{isGeneratingChallenge ? 'Generating Challenge...' : 'Generate New Challenge'}</span>
         </button>
       </div>
 
@@ -603,7 +627,6 @@ function McqTestComponent({
   onAnswerChange,
   onSubmit,
   result,
-  testActive,
   isFullscreen,
   t,
 }) {
@@ -611,22 +634,36 @@ function McqTestComponent({
   const isSubmitted = Boolean(result)
   const progress = questions.length ? Math.round((attemptedCount / questions.length) * 100) : 0
 
+  const getScoreRating = (pct) => {
+    if (pct === 100) return { title: 'Outstanding!', badge: 'Mastered 🌟', color: 'text-emerald-500' }
+    if (pct >= 80) return { title: 'Great Job!', badge: 'Proficient 👍', color: 'text-teal-500' }
+    if (pct >= 60) return { title: 'Good Effort!', badge: 'Developing 📈', color: 'text-amber-500' }
+    return { title: 'Keep Practicing!', badge: 'Review Needed 📚', color: 'text-rose-500' }
+  }
+
+  const scoreRating = result ? getScoreRating(result.percentage) : null
+
   return (
-    <section className={`mt-8 rounded-3xl border px-5 py-5 shadow-sm sm:px-6 ${t.inputContainer}`}>
+    <section className={`mt-8 rounded-3xl border px-5 py-6 shadow-md transition-all sm:px-7 backdrop-blur-md ${t.inputContainer}`}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className={`text-xl font-semibold ${t.assistantText}`}>MCQ Test</h2>
-          <p className={`mt-1 text-sm ${t.assistantText}`}>
-            Topic: <span className="font-semibold">{topic}</span>
+          <div className="flex items-center gap-2">
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-teal-500 text-white shadow-xs">
+              <FiZap className="h-4 w-4" />
+            </span>
+            <h2 className={`text-xl font-bold ${t.assistantText}`}>MCQ Test Arena</h2>
+          </div>
+          <p className={`mt-1.5 text-sm ${t.assistantText}`}>
+            Topic: <span className="font-bold text-teal-600 dark:text-teal-400">{topic}</span>
           </p>
           {!isFullscreen && (
-            <p className={`mt-1 text-xs ${t.assistantText}`}>
-              Click a difficulty to generate {QUESTION_COUNT} questions.
+            <p className={`mt-0.5 text-xs opacity-75 ${t.assistantText}`}>
+              Choose a difficulty to generate {QUESTION_COUNT} customized questions.
             </p>
           )}
         </div>
         {!isFullscreen && (
-          <div className="grid w-full grid-cols-3 gap-2 rounded-2xl border bg-white/60 p-1 sm:w-auto dark:bg-slate-900/30">
+          <div className="grid w-full grid-cols-3 gap-2 rounded-2xl border border-teal-500/20 bg-white/70 p-1 sm:w-auto dark:bg-slate-900/40">
             {LEVEL_ORDER.map((level) => {
               const isSelected = selectedDifficulty === level
               return (
@@ -635,7 +672,7 @@ function McqTestComponent({
                   type="button"
                   onClick={() => onDifficultySelect(level)}
                   disabled={isGeneratingQuestions}
-                  className={`rounded-xl px-4 py-2 text-xs font-semibold capitalize transition ${
+                  className={`rounded-xl px-4 py-2 text-xs font-bold capitalize transition-all hover:scale-105 active:scale-95 ${
                     isSelected ? 'bg-teal-500 text-white shadow-sm' : `${t.inputBtnBg} ${t.inputBtn}`
                   }`}
                 >
@@ -648,64 +685,81 @@ function McqTestComponent({
       </div>
 
       {!isFullscreen && !questions.length && (
-        <p className={`mt-5 text-sm ${t.assistantText}`}>
-          Select a difficulty to start the test in full screen mode.
-        </p>
+        <div className="mt-6 rounded-2xl border border-dashed border-teal-500/30 p-6 text-center">
+          <p className={`text-sm font-medium ${t.assistantText}`}>
+            Select a difficulty (Easy, Medium, or Hard) to begin your interactive quiz.
+          </p>
+        </div>
       )}
 
       {isGeneratingQuestions && (
-        <p className={`mt-3 text-sm ${t.assistantText}`}>
-          Generating topic-specific questions with LLM...
-        </p>
+        <div className="mt-6 flex items-center justify-center gap-3 rounded-2xl border border-teal-500/20 bg-teal-50/60 dark:bg-teal-950/20 p-5">
+          <FiRefreshCw className="h-5 w-5 animate-spin text-teal-500" />
+          <span className="text-sm font-semibold text-teal-700 dark:text-teal-300">
+            Generating questions with AI Engine...
+          </span>
+        </div>
       )}
 
       {generationError && (
-        <div className="mt-3 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 dark:border-rose-700 dark:bg-rose-950/30">
-          <p className="text-sm text-rose-700 dark:text-rose-300">{generationError}</p>
+        <div className="mt-4 rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3.5 dark:border-rose-700 dark:bg-rose-950/30">
+          <p className="text-sm font-semibold text-rose-700 dark:text-rose-300">{generationError}</p>
         </div>
       )}
 
       {questions.length > 0 && (
         <>
-          <div className="mt-4 rounded-2xl border bg-white/60 p-4 dark:bg-slate-900/30">
+          <div className="mt-5 rounded-2xl border border-teal-500/20 bg-white/70 p-4.5 shadow-xs dark:bg-slate-900/30">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className={`text-xs ${t.assistantText}`}>
-                Difficulty: <span className="font-semibold capitalize">{selectedDifficulty}</span>
-              </p>
-              <p className={`text-xs ${t.assistantText}`}>
-                Answered {attemptedCount} of {questions.length}
-              </p>
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-teal-100 dark:bg-teal-950/60 px-2.5 py-1 text-xs font-bold capitalize text-teal-800 dark:text-teal-300">
+                Difficulty: {selectedDifficulty}
+              </span>
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                Answered: {attemptedCount} / {questions.length} ({progress}%)
+              </span>
             </div>
-            <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
-              <div className="h-full rounded-full bg-teal-500 transition-all" style={{ width: `${progress}%` }} />
+            <div className="mt-2.5 h-2.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+              <div
+                className="h-full rounded-full bg-linear-to-r from-teal-500 to-cyan-500 transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
             </div>
           </div>
 
-          <div className="mt-5 space-y-4">
-            {questions.map((question) => (
-              <div key={question.id} className="rounded-2xl border bg-white/90 px-4 py-4 shadow-sm dark:bg-slate-900/40">
-                <p className={`text-sm font-semibold ${t.assistantText}`}>{question.text}</p>
-                <div className="mt-2 grid gap-2">
+          <div className="mt-6 space-y-4">
+            {questions.map((question, qIdx) => (
+              <div
+                key={question.id}
+                className="rounded-3xl border border-slate-200/80 bg-white/95 p-5 shadow-xs transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900/50"
+              >
+                <div className="flex items-start gap-3">
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-teal-500/10 text-xs font-bold text-teal-600 dark:text-teal-400">
+                    {qIdx + 1}
+                  </span>
+                  <p className={`text-sm font-semibold leading-relaxed ${t.assistantText}`}>{question.text}</p>
+                </div>
+
+                <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
                   {question.options.map((option, optionIndex) => {
                     const checked = answers[question.id] === optionIndex
                     const isCorrectOption = optionIndex === question.answerIndex
                     const isWrongSelected = isSubmitted && checked && !isCorrectOption
                     const isCorrectHighlight = isSubmitted && isCorrectOption
 
-                    let optionClass = 'border-slate-200'
+                    let optionClass = 'border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-800/60 hover:border-teal-400 hover:bg-teal-50/40 dark:hover:bg-slate-800'
                     if (isCorrectHighlight) {
-                      optionClass = 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40'
+                      optionClass = 'border-emerald-500 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200 ring-2 ring-emerald-500/30 font-semibold'
                     } else if (isWrongSelected) {
-                      optionClass = 'border-rose-500 bg-rose-50 dark:bg-rose-950/40'
+                      optionClass = 'border-rose-500 bg-rose-50 text-rose-900 dark:bg-rose-950/40 dark:text-rose-200 ring-2 ring-rose-500/30'
                     } else if (checked) {
-                      optionClass = 'border-teal-400 bg-teal-50 dark:bg-teal-950/40'
+                      optionClass = 'border-teal-500 bg-teal-50/80 dark:bg-teal-950/40 ring-2 ring-teal-500/20 font-semibold'
                     }
 
                     return (
                       <label
                         key={`${question.id}-${optionIndex}`}
-                        className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm ${optionClass} ${
-                          isSubmitted ? 'cursor-default' : 'cursor-pointer'
+                        className={`flex items-center gap-3 rounded-2xl border p-3 text-sm transition-all duration-150 ${optionClass} ${
+                          isSubmitted ? 'cursor-default' : 'cursor-pointer hover:scale-[1.01] active:scale-[0.99]'
                         }`}
                       >
                         <input
@@ -714,11 +768,20 @@ function McqTestComponent({
                           checked={checked}
                           disabled={isSubmitted}
                           onChange={() => onAnswerChange(question.id, optionIndex)}
+                          className="hidden"
                         />
-                        <span className="grid h-6 w-6 place-items-center rounded-full border border-slate-300 text-xs font-semibold text-slate-600 dark:border-slate-500 dark:text-slate-300">
+                        <span
+                          className={`grid h-7 w-7 shrink-0 place-items-center rounded-xl border text-xs font-bold transition-colors ${
+                            checked || isCorrectHighlight
+                              ? 'border-transparent bg-teal-500 text-white'
+                              : 'border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                          }`}
+                        >
                           {String.fromCharCode(65 + optionIndex)}
                         </span>
-                        <span className={t.assistantText}>{option}</span>
+                        <span className="flex-1 text-xs leading-relaxed">{option}</span>
+                        {isCorrectHighlight && <FiCheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />}
+                        {isWrongSelected && <FiXCircle className="h-4 w-4 text-rose-500 shrink-0" />}
                       </label>
                     )
                   })}
@@ -727,28 +790,38 @@ function McqTestComponent({
             ))}
           </div>
 
-          <div className="mt-5 flex justify-end border-t border-slate-200 pt-4 dark:border-slate-700">
-            <button
-              type="button"
-              onClick={onSubmit}
-              className={`rounded-full px-5 py-2.5 text-xs font-semibold ${t.inputBtnBg} ${t.inputBtn}`}
-            >
-              Submit Test
-            </button>
-          </div>
+          {!isSubmitted && (
+            <div className="mt-6 flex justify-end border-t border-slate-200 pt-5 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={onSubmit}
+                className="flex items-center gap-2 rounded-2xl bg-linear-to-tr from-teal-600 to-teal-500 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-teal-500/25 transition-all hover:scale-105 active:scale-95"
+              >
+                <FiAward className="h-4 w-4" />
+                Submit Test ({attemptedCount}/{questions.length} answered)
+              </button>
+            </div>
+          )}
         </>
       )}
 
       {result && (
-        <div className="mt-6 rounded-2xl border border-teal-300 bg-teal-50 px-4 py-4 dark:border-teal-800 dark:bg-teal-900/20">
-          <h3 className="text-base font-semibold text-teal-900 dark:text-teal-200">Final Score</h3>
-          <p className="mt-1 text-sm text-teal-900 dark:text-teal-200">
-            {result.correct} / {result.total} ({result.percentage}%)
+        <div className="mt-8 rounded-3xl border border-teal-500/30 bg-linear-to-b from-teal-50/90 to-cyan-50/90 dark:from-slate-900/90 dark:to-teal-950/40 p-6 shadow-lg text-center animate-slide-up">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-linear-to-tr from-teal-500 to-cyan-400 text-white shadow-lg shadow-teal-500/30 font-extrabold text-2xl">
+            {result.percentage}%
+          </div>
+          <h3 className="mt-4 text-xl font-bold text-slate-900 dark:text-white">
+            {scoreRating?.title}
+          </h3>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            You answered <span className="font-bold text-teal-600 dark:text-teal-400">{result.correct}</span> out of{' '}
+            <span className="font-bold">{result.total}</span> questions correctly.
           </p>
-          <p className="mt-2 text-xs text-teal-800 dark:text-teal-300">Difficulty: {result.level}</p>
-          {!testActive && (
-            <p className="mt-1 text-xs text-teal-800 dark:text-teal-300">Test ended and full screen exited after submit.</p>
-          )}
+          <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-teal-100 dark:bg-teal-950/60 px-4 py-1.5 text-xs font-bold text-teal-800 dark:text-teal-200">
+            <span>Rating: {scoreRating?.badge}</span>
+            <span>•</span>
+            <span className="capitalize">{result.level} level</span>
+          </div>
         </div>
       )}
     </section>
@@ -1026,24 +1099,30 @@ function TestPage() {
                   className={`w-full rounded-2xl border bg-white/80 px-4 py-3 text-sm outline-none ${t.inputText}`}
                 />
 
-                <div className="grid grid-cols-2 gap-2 rounded-2xl border bg-white/70 p-1 dark:bg-slate-900/20">
+                <div className="inline-flex shrink-0 items-center rounded-2xl border border-slate-200/80 bg-slate-100/90 p-1 shadow-inner backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/80">
                   <button
                     type="button"
                     onClick={() => setSelectedType('mcq')}
-                    className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${
-                      selectedType === 'mcq' ? 'bg-teal-500 text-white' : `${t.inputBtnBg} ${t.inputBtn}`
+                    className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all duration-200 ${
+                      selectedType === 'mcq'
+                        ? 'bg-linear-to-tr from-teal-600 to-teal-500 text-white shadow-md shadow-teal-500/25'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-white/40 dark:hover:bg-slate-800/50'
                     }`}
                   >
-                    MCQ
+                    <FiCheckCircle className="h-3.5 w-3.5" />
+                    <span>MCQ Quiz</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setSelectedType('coding')}
-                    className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${
-                      selectedType === 'coding' ? 'bg-teal-500 text-white' : `${t.inputBtnBg} ${t.inputBtn}`
+                    className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all duration-200 ${
+                      selectedType === 'coding'
+                        ? 'bg-linear-to-tr from-teal-600 to-teal-500 text-white shadow-md shadow-teal-500/25'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-white/40 dark:hover:bg-slate-800/50'
                     }`}
                   >
-                    Code
+                    <FiCode className="h-3.5 w-3.5" />
+                    <span>Coding</span>
                   </button>
                 </div>
 
@@ -1051,14 +1130,41 @@ function TestPage() {
                   type="button"
                   onClick={handleGenerate}
                   disabled={!canGenerate}
-                  className={`rounded-full px-5 py-2.5 text-sm font-semibold transition ${
+                  className={`rounded-2xl px-6 py-3 text-xs font-bold transition-all duration-200 ${
                     canGenerate
-                      ? `${t.inputBtnBg} ${t.inputBtn}`
-                      : 'cursor-not-allowed bg-slate-200 text-slate-400'
+                      ? 'bg-linear-to-tr from-teal-600 to-teal-500 text-white shadow-md shadow-teal-500/25 hover:scale-105 active:scale-95'
+                      : 'cursor-not-allowed bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-600'
                   }`}
                 >
                   Generate
                 </button>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-200/60 pt-3 dark:border-slate-800">
+                <span className="text-[11px] font-bold text-slate-400">Try Topic:</span>
+                {[
+                  'Python Basics',
+                  'Binary Search',
+                  'Dynamic Programming',
+                  'SQL Joins',
+                  'Recursion',
+                  'Operating Systems',
+                ].map((sample) => (
+                  <button
+                    key={sample}
+                    type="button"
+                    onClick={() => {
+                      setTopic(sample)
+                    }}
+                    className={`rounded-xl px-2.5 py-1 text-xs font-semibold transition-all hover:scale-105 active:scale-95 ${
+                      topic === sample
+                        ? 'bg-teal-500 text-white shadow-xs'
+                        : 'bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-teal-50 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    {sample}
+                  </button>
+                ))}
               </div>
             </div>
           </>
@@ -1077,7 +1183,6 @@ function TestPage() {
               onAnswerChange={handleAnswerChange}
               onSubmit={handleSubmit}
               result={result}
-              testActive={isFullscreen}
               isFullscreen={isFullscreen}
               t={t}
             />
