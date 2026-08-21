@@ -27,6 +27,14 @@ from litellm import RateLimitError, completion
 
 from .models import CommunityMessage
 
+def health_check(request):
+	"""Health check endpoint for root domain and Render service monitoring."""
+	return JsonResponse({
+		'status': 'healthy',
+		'service': 'AI Teaching Assistant Backend API',
+		'version': '1.0.0',
+	})
+
 MODEL_REGISTRY = {
 	'gemini-3.5-flash': {'provider': 'google', 'model': 'gemini/gemini-3.5-flash'},
 	'gemini-2.5-flash': {'provider': 'google', 'model': 'gemini/gemini-2.5-flash'},

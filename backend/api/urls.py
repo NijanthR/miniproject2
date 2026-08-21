@@ -3,6 +3,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path('health/', views.health_check, name='api_health_check'),
     path('chat/', views.chat, name='chat'),
     path('chat/history/', views.chat_history, name='chat_history'),
     path('community/messages/', views.community_messages, name='community_messages'),
