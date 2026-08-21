@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { LANGUAGE_OPTIONS } from './themeConstants.js'
 
 const THEME_STORAGE_KEY = 'ta-theme'
@@ -22,77 +22,85 @@ const ThemeContext = createContext(null)
 const themes = {
   light: {
     // Page / root
-    pageBg: 'bg-linear-to-b from-white via-teal-50 to-teal-100',
+    pageBg: 'bg-gradient-to-b from-slate-50 via-teal-50/25 to-slate-100',
     // Sidebar
-    sidebarBg: 'bg-linear-to-b from-white via-teal-50 to-teal-100',
-    sidebarBorder: 'border-teal-200',
-    sidebarText: 'text-teal-900',
-    sidebarDivider: 'via-teal-200',
-    sidebarIconBg: 'bg-teal-100',
+    sidebarBg: 'bg-white border-r border-slate-200',
+    sidebarBorder: 'border-slate-200',
+    sidebarText: 'text-slate-800',
+    sidebarDivider: 'via-slate-200',
+    sidebarIconBg: 'bg-teal-50',
     sidebarIconText: 'text-teal-700',
-    sidebarChevron: 'text-teal-600 hover:bg-teal-100 hover:text-teal-800',
-    sidebarActive: 'bg-teal-100 text-teal-900 shadow-[0_0_0_1px_rgba(20,184,166,0.35)]',
-    sidebarHover: 'text-teal-700 hover:bg-teal-50 hover:text-teal-900',
-    sidebarSettingsHover: 'text-teal-700 hover:bg-teal-100 hover:text-teal-800',
-    sidebarUserCard: 'bg-teal-50',
-    sidebarUserName: 'text-teal-900',
-    sidebarUserEmail: 'text-teal-600',
+    sidebarChevron: 'text-slate-500 hover:bg-slate-100 hover:text-slate-800',
+    sidebarActive: 'bg-teal-600 text-white shadow-sm font-semibold',
+    sidebarHover: 'text-slate-700 hover:bg-slate-100 hover:text-slate-900',
+    sidebarSettingsHover: 'text-slate-700 hover:bg-slate-100 hover:text-slate-900',
+    sidebarUserCard: 'bg-slate-100/90 border border-slate-200/80',
+    sidebarUserName: 'text-slate-900 font-semibold',
+    sidebarUserEmail: 'text-slate-500',
     // Chat messages
-    userMsgBg: 'bg-slate-100',
-    userMsgText: 'text-slate-800',
-    assistantText: 'text-slate-800',
-    actionBtn: 'text-slate-400 hover:bg-slate-100 hover:text-slate-600',
+    userMsgBg: 'bg-slate-900 text-white shadow-sm',
+    userMsgText: 'text-white',
+    assistantText: 'text-slate-900',
+    actionBtn: 'text-slate-600 hover:bg-slate-200 hover:text-slate-900 bg-white border-slate-200 shadow-2xs',
     // Scroll button
-    scrollBtnBg: 'bg-white/90 border-slate-200 text-slate-600',
+    scrollBtnBg: 'bg-white border-slate-200 text-slate-700 shadow-md',
     // Input
-    inputContainer: 'border-teal-200 bg-teal-50/80',
+    inputContainer: 'border-slate-300/90 bg-white shadow-md',
     inputText: 'text-slate-900 placeholder:text-slate-400',
-    inputBtn: 'text-slate-600',
-    inputBtnBg: 'bg-slate-100 hover:bg-slate-200',
-    inputDropdownBg: 'bg-white border-slate-200',
-    inputDropdownItem: 'text-slate-700 hover:bg-teal-50',
-    inputDropdownActive: 'text-teal-700 font-semibold',
-    inputDropdownBadge: 'bg-slate-100 text-slate-500',
+    inputBtn: 'text-slate-700',
+    inputBtnBg: 'bg-slate-100 hover:bg-slate-200 text-slate-700',
+    inputDropdownBg: 'bg-white border-slate-200 shadow-xl',
+    inputDropdownItem: 'text-slate-800 hover:bg-teal-50',
+    inputDropdownActive: 'text-teal-700 font-bold bg-teal-50/80',
+    inputDropdownBadge: 'bg-slate-100 text-slate-600 font-medium',
   },
   dark: {
     // Page / root
-    pageBg: 'bg-linear-to-b from-slate-900 via-slate-800 to-slate-700',
+    pageBg: 'bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950',
     // Sidebar
-    sidebarBg: 'bg-linear-to-b from-slate-900 via-slate-800 to-slate-700',
-    sidebarBorder: 'border-teal-900',
-    sidebarText: 'text-teal-100',
-    sidebarDivider: 'via-teal-800',
-    sidebarIconBg: 'bg-slate-700',
+    sidebarBg: 'bg-slate-950 border-r border-slate-800',
+    sidebarBorder: 'border-slate-800',
+    sidebarText: 'text-slate-100',
+    sidebarDivider: 'via-slate-800',
+    sidebarIconBg: 'bg-slate-800',
     sidebarIconText: 'text-teal-400',
-    sidebarChevron: 'text-teal-400 hover:bg-slate-700 hover:text-teal-300',
-    sidebarActive: 'bg-slate-700 text-teal-300 shadow-[0_0_0_1px_rgba(20,184,166,0.25)]',
-    sidebarHover: 'text-teal-300 hover:bg-slate-700 hover:text-teal-100',
-    sidebarSettingsHover: 'text-teal-300 hover:bg-slate-700 hover:text-teal-100',
-    sidebarUserCard: 'bg-slate-700',
-    sidebarUserName: 'text-teal-100',
-    sidebarUserEmail: 'text-teal-400',
+    sidebarChevron: 'text-slate-400 hover:bg-slate-800 hover:text-slate-200',
+    sidebarActive: 'bg-teal-600 text-white shadow-sm font-semibold',
+    sidebarHover: 'text-slate-300 hover:bg-slate-800 hover:text-white',
+    sidebarSettingsHover: 'text-slate-300 hover:bg-slate-800 hover:text-white',
+    sidebarUserCard: 'bg-slate-900 border border-slate-800',
+    sidebarUserName: 'text-slate-100 font-semibold',
+    sidebarUserEmail: 'text-slate-400',
     // Chat messages
-    userMsgBg: 'bg-slate-700',
-    userMsgText: 'text-slate-100',
-    assistantText: 'text-slate-200',
-    actionBtn: 'text-slate-500 hover:bg-slate-700 hover:text-slate-300',
+    userMsgBg: 'bg-teal-600 text-white shadow-sm',
+    userMsgText: 'text-white',
+    assistantText: 'text-slate-100',
+    actionBtn: 'text-slate-400 hover:bg-slate-800 hover:text-slate-200 bg-slate-900 border-slate-800 shadow-2xs',
     // Scroll button
-    scrollBtnBg: 'bg-slate-800/90 border-slate-600 text-slate-300',
+    scrollBtnBg: 'bg-slate-900 border-slate-700 text-slate-200 shadow-md',
     // Input
-    inputContainer: 'border-slate-600 bg-slate-800/80',
+    inputContainer: 'border-slate-800 bg-slate-900/95 shadow-xl',
     inputText: 'text-slate-100 placeholder:text-slate-500',
-    inputBtn: 'text-teal-300',
-    inputBtnBg: 'bg-slate-700 hover:bg-slate-600',
-    inputDropdownBg: 'bg-slate-800 border-slate-600',
-    inputDropdownItem: 'text-slate-300 hover:bg-slate-700',
-    inputDropdownActive: 'text-teal-400 font-semibold',
-    inputDropdownBadge: 'bg-slate-700 text-slate-400',
+    inputBtn: 'text-slate-300',
+    inputBtnBg: 'bg-slate-800 hover:bg-slate-700 text-slate-200',
+    inputDropdownBg: 'bg-slate-900 border-slate-800 shadow-2xl',
+    inputDropdownItem: 'text-slate-200 hover:bg-slate-800',
+    inputDropdownActive: 'text-teal-400 font-bold bg-slate-800/80',
+    inputDropdownBadge: 'bg-slate-800 text-slate-400 font-medium',
   },
 }
 
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(getInitialTheme)
   const [language, setLanguageState] = useState(getInitialLanguage)
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [theme])
 
   const toggleTheme = () => {
     setTheme((currentTheme) => {

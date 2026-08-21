@@ -12,7 +12,10 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 import os
 from pathlib import Path
-import dj_database_url
+try:
+    import dj_database_url
+except ImportError:
+    dj_database_url = None
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -40,6 +43,7 @@ else:
     ALLOWED_HOSTS = [
         'localhost',
         '127.0.0.1',
+        'testserver',
         '.onrender.com',
         '.vercel.app',
     ] + parsed_hosts
@@ -64,10 +68,13 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 ]
 
+import importlib.util
+has_whitenoise = importlib.util.find_spec('whitenoise') is not None
+
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+] + (['whitenoise.middleware.WhiteNoiseMiddleware'] if has_whitenoise else []) + [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -107,7 +114,7 @@ DATABASES = {
 }
 
 database_url = os.getenv('DATABASE_URL')
-if database_url:
+if database_url and dj_database_url and not database_url.startswith('sqlite'):
     DATABASES['default'] = dj_database_url.config(
         default=database_url,
         conn_max_age=600,
@@ -151,7 +158,8 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+if has_whitenoise:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

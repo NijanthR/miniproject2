@@ -204,8 +204,6 @@ function AuthPage() {
         throw new Error('Google client ID was not returned by the server.')
       }
 
-      const redirectUri = String(configPayload?.redirectUri || window.location.origin).trim() || window.location.origin
-
       await loadGoogleIdentityScript()
       if (!window.google?.accounts?.oauth2) {
         throw new Error('Google Identity SDK is unavailable.')
@@ -214,14 +212,46 @@ function AuthPage() {
       const codeClient = window.google.accounts.oauth2.initCodeClient({
         client_id: clientId,
         scope: 'openid email profile',
-        ux_mode: 'redirect',
-        redirect_uri: redirectUri,
-      })
+        ux_mode: 'popup',
+        callback: async (authResponse) => {
+          if (authResponse.error) {
+            setAuthError(authResponse.error_description || authResponse.error || 'Google sign-in was cancelled.')
+            setIsGoogleLoading(false)
+            return
+          }
+          if (!authResponse.code) {
+            setAuthError('Google did not return an authorization code.')
+            setIsGoogleLoading(false)
+            return
+          }
 
-      const query = new URLSearchParams(window.location.search)
-      query.set('redirect_uri', redirectUri)
-      const nextUrl = `${window.location.pathname}?${query.toString()}${window.location.hash}`
-      window.history.replaceState({}, '', nextUrl)
+          try {
+            const response = await fetch(buildApiUrl('/api/auth/google/'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                code: authResponse.code,
+                redirect_uri: 'postmessage',
+              }),
+            })
+            const payload = await response.json().catch(() => ({}))
+            if (!response.ok) {
+              throw new Error(payload?.error || 'Google authentication failed.')
+            }
+
+            localStorage.setItem('teaching-assistant-google-user', JSON.stringify(payload?.user || {}))
+            navigate('/app')
+          } catch (err) {
+            setAuthError(String(err?.message || 'Google authentication failed.'))
+          } finally {
+            setIsGoogleLoading(false)
+          }
+        },
+        error_callback: () => {
+          setAuthError('Google sign-in popup was cancelled or blocked.')
+          setIsGoogleLoading(false)
+        },
+      })
 
       codeClient.requestCode()
     } catch (error) {

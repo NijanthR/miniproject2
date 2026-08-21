@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FiMessageSquare, FiSend, FiSmile, FiTrash2, FiUsers, FiZap } from 'react-icons/fi'
 import { useTheme } from '../context/ThemeContext.jsx'
-import { buildApiUrl } from '../config/api.js'
+import { buildApiUrl, buildWsUrl } from '../config/api.js'
 
 const MESSAGE_TTL_MS = 60 * 1000
 const PROFILE_STORAGE_KEY = 'teaching-assistant-google-user'
@@ -52,21 +52,39 @@ function Avatar({ name, imageUrl }) {
   )
 }
 
+function dedupeMessages(list) {
+  if (!Array.isArray(list)) return []
+  const seenIds = new Set()
+  const seenSignatures = new Set()
+  const result = []
+  for (const msg of list) {
+    if (!msg || !msg.message) continue
+    const idKey = String(msg.id)
+    const sigKey = `${msg.name}:::${msg.message}:::${Math.floor((msg.timestamp || 0) / 2)}`
+    if (seenIds.has(idKey) || seenSignatures.has(sigKey)) continue
+    seenIds.add(idKey)
+    seenSignatures.add(sigKey)
+    result.push(msg)
+  }
+  return result.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+}
+
 function CommunityPage() {
   const { theme, t } = useTheme()
   const isDark = theme === 'dark'
   const [messages, setMessages] = useState([])
   const [draft, setDraft] = useState('')
-  const [status, setStatus] = useState('loading')
+  const [status, setStatus] = useState('connecting')
   const [reactions, setReactions] = useState({})
   const chatBottomRef = useRef(null)
+  const wsRef = useRef(null)
   const currentProfile = getStoredProfile()
   const currentName = currentProfile.name
   const currentPicture = currentProfile.picture
 
   const displayMessages = useMemo(() => {
     const now = Date.now()
-    return messages.filter((msg) => now - msg.timestamp * 1000 < MESSAGE_TTL_MS)
+    return dedupeMessages(messages.filter((msg) => now - msg.timestamp * 1000 < MESSAGE_TTL_MS))
   }, [messages])
 
   const fetchMessages = useCallback(async () => {
@@ -74,42 +92,103 @@ function CommunityPage() {
       const response = await fetch(buildApiUrl(`/api/community/messages/?name=${encodeURIComponent(currentName)}`))
       if (!response.ok) throw new Error('Failed to load messages.')
       const payload = await response.json()
-      setMessages(Array.isArray(payload?.messages) ? payload.messages : [])
+      if (Array.isArray(payload?.messages)) {
+        setMessages((prev) => dedupeMessages([...payload.messages, ...prev]))
+      }
       setStatus('online')
     } catch {
-      setStatus('offline')
+      // Ignore if offline
     }
   }, [currentName])
 
+  // WebSocket Connection
   useEffect(() => {
+    let ws = null
+    let reconnectTimeout = null
     let isMounted = true
 
-    const poll = async () => {
-      if (!isMounted) return
-      await fetchMessages()
+    const connectWs = () => {
+      try {
+        const wsUrl = buildWsUrl('/ws/community/')
+        ws = new WebSocket(wsUrl)
+        wsRef.current = ws
+
+        ws.onopen = () => {
+          if (isMounted) setStatus('online')
+        }
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data)
+            if (data.type === 'snapshot' && Array.isArray(data.messages)) {
+              setMessages(dedupeMessages(data.messages))
+            } else if (data.type === 'message' && data.message) {
+              setMessages((prev) => dedupeMessages([...prev, data.message]))
+            } else if (data.type === 'delete' && data.id) {
+              setMessages((prev) => prev.filter((m) => String(m.id) !== String(data.id)))
+            }
+          } catch {
+            // Ignore parsing error
+          }
+        }
+
+        ws.onclose = () => {
+          if (isMounted) {
+            reconnectTimeout = setTimeout(connectWs, 4000)
+          }
+        }
+
+        ws.onerror = () => {
+          ws?.close()
+        }
+      } catch {
+        // Fallback to polling if WebSocket fails
+      }
     }
 
-    poll()
-    const interval = setInterval(poll, 3000)
+    connectWs()
+    fetchMessages()
 
-    return () => {
-      isMounted = false
-      clearInterval(interval)
-    }
-  }, [fetchMessages])
+    const pollInterval = setInterval(() => {
+      if (isMounted) fetchMessages()
+    }, 4000)
 
-  useEffect(() => {
-    const interval = setInterval(() => {
+    const pruneInterval = setInterval(() => {
       const now = Date.now()
       setMessages((prev) => prev.filter((msg) => now - msg.timestamp * 1000 < MESSAGE_TTL_MS))
     }, 5000)
-    return () => clearInterval(interval)
-  }, [])
+
+    return () => {
+      isMounted = false
+      clearTimeout(reconnectTimeout)
+      clearInterval(pollInterval)
+      clearInterval(pruneInterval)
+      if (ws) ws.close()
+    }
+  }, [fetchMessages])
 
   const handleSend = () => {
     const trimmed = draft.trim()
     if (!trimmed) return
 
+    setDraft('')
+
+    // If WebSocket is actively open, send only via WebSocket to prevent duplicate posts
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      try {
+        wsRef.current.send(
+          JSON.stringify({
+            name: currentName,
+            message: trimmed,
+          })
+        )
+        return
+      } catch {
+        // If WebSocket send fails, fall through to REST
+      }
+    }
+
+    // Fallback: Post via REST
     fetch(buildApiUrl('/api/community/messages/post/'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -122,16 +201,33 @@ function CommunityPage() {
         if (!response.ok) throw new Error('Failed to send message.')
         return response.json()
       })
-      .then(() => {
-        setDraft('')
-        fetchMessages()
+      .then((savedMsg) => {
+        if (savedMsg && savedMsg.id) {
+          setMessages((prev) => dedupeMessages([...prev, savedMsg]))
+        }
       })
       .catch(() => {
-        setStatus('offline')
+        // Ignore
       })
   }
 
   const handleDelete = (messageId) => {
+    setMessages((prev) => prev.filter((m) => String(m.id) !== String(messageId)))
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      try {
+        wsRef.current.send(
+          JSON.stringify({
+            action: 'delete',
+            id: messageId,
+            name: currentName,
+          })
+        )
+      } catch {
+        // Fallback to REST
+      }
+    }
+
     fetch(buildApiUrl('/api/community/messages/delete/'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -139,17 +235,9 @@ function CommunityPage() {
         id: messageId,
         name: currentName,
       }),
+    }).catch(() => {
+      // Ignore
     })
-      .then((response) => {
-        if (!response.ok) throw new Error('Failed to delete message.')
-        return response.json()
-      })
-      .then(() => {
-        fetchMessages()
-      })
-      .catch(() => {
-        setStatus('offline')
-      })
   }
 
   const handleAddReaction = (messageId, emoji) => {

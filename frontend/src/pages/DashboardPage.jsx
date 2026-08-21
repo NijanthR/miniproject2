@@ -1221,9 +1221,12 @@ function DashboardPage({ size }) {
       setIsGenerating(false)
       await animateAssistantResponse(assistantId, data.reply || '')
     } catch (err) {
+      const errText = err?.message === 'Failed to fetch'
+        ? 'Cannot connect to backend server. Please make sure the backend is running (python manage.py runserver).'
+        : (err?.message || 'Unexpected error.')
       setMessages((prevMessages) => [
         ...prevMessages,
-        { id: assistantId, role: 'assistant', text: `Error: ${err.message}` },
+        { id: assistantId, role: 'assistant', text: `Error: ${errText}` },
       ])
     } finally {
       setIsGenerating(false)
@@ -1241,14 +1244,14 @@ function DashboardPage({ size }) {
       >
         {messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center px-4 py-8 max-w-3xl mx-auto animate-fade-in select-none">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-teal-500/20 bg-teal-50/80 dark:bg-teal-950/30 px-3.5 py-1 text-xs font-semibold text-teal-700 dark:text-teal-300 shadow-xs">
-              <RiSparklingFill className="h-3.5 w-3.5 text-teal-500 animate-pulse" />
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-teal-500/30 bg-teal-500/10 px-4 py-1 text-xs font-bold text-teal-800 dark:text-teal-300 shadow-xs">
+              <RiSparklingFill className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400 animate-pulse" />
               AI Learning Companion
             </div>
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 dark:text-white">
               How can I help you study today?
             </h1>
-            <p className="mt-2 text-sm sm:text-base text-slate-600 dark:text-slate-400 max-w-lg">
+            <p className="mt-2 text-sm sm:text-base font-normal text-slate-600 dark:text-slate-300 max-w-lg">
               Ask deep questions, run code, generate customized MCQ & coding tests, or practice mock interviews.
             </p>
 
@@ -1260,21 +1263,21 @@ function DashboardPage({ size }) {
                   onClick={() => {
                     setInputValue(item.prompt)
                   }}
-                  className="group flex flex-col justify-between rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 p-4 shadow-xs backdrop-blur-xs transition-all duration-200 hover:-translate-y-1 hover:border-teal-500/40 hover:shadow-md active:scale-98"
+                  className="group flex flex-col justify-between rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/90 p-4.5 shadow-sm backdrop-blur-md transition-all duration-200 hover:-translate-y-1 hover:border-teal-500 hover:shadow-md active:scale-98 cursor-pointer"
                 >
                   <div className="flex items-start justify-between">
-                    <span className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 dark:bg-slate-800 transition-transform group-hover:scale-110">
+                    <span className="grid h-9 w-9 place-items-center rounded-xl bg-teal-50 dark:bg-slate-800 transition-transform group-hover:scale-110">
                       {item.icon}
                     </span>
-                    <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                    <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300">
                       {item.category}
                     </span>
                   </div>
                   <div className="mt-3">
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">
                       {item.title}
                     </h3>
-                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-400 line-clamp-2">
                       {item.desc}
                     </p>
                   </div>

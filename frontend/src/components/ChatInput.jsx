@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FiArrowUp, FiCheck, FiChevronDown, FiCornerDownLeft, FiCpu, FiFile, FiImage, FiMic, FiMicOff, FiPaperclip, FiSquare, FiX } from 'react-icons/fi'
+import { FiArrowUp, FiCheck, FiChevronDown, FiCornerDownLeft, FiCpu, FiFile, FiImage, FiPaperclip, FiSquare, FiX } from 'react-icons/fi'
 import { useTheme } from '../context/ThemeContext.jsx'
 
 function formatDuration(seconds) {
@@ -28,7 +28,13 @@ function pickSupportedRecordingMimeType() {
 
 const MODELS = [
   { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', badge: 'Google', desc: 'Fast multimodal reasoning' },
-  { id: 'hf-llama3-8b', label: 'Llama 3 8B Instruct', badge: 'Hugging Face', desc: 'Open-source fast assistant' },
+  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', badge: 'Google', desc: 'Lightweight & responsive' },
+  { id: 'nvidia-llama-3.1-70b', label: 'Llama 3.1 70B Instruct', badge: 'NVIDIA', desc: 'High-accuracy reasoning & coding' },
+  { id: 'nvidia-llama-3.1-8b', label: 'Llama 3.1 8B Instruct', badge: 'NVIDIA', desc: 'Ultra-fast low latency assistant' },
+  { id: 'nvidia-llama-3.2-11b-vision', label: 'Llama 3.2 11B Vision', badge: 'NVIDIA', desc: 'Multimodal vision & text understanding' },
+  { id: 'nvidia-llama-3.3-nemotron', label: 'Nemotron 49B Super', badge: 'NVIDIA', desc: 'Advanced reasoning by NVIDIA' },
+  { id: 'nvidia-mistral-nemotron', label: 'Mistral Nemotron', badge: 'NVIDIA', desc: 'Fast & precise instruction following' },
+  { id: 'nvidia-nemotron-mini-4b', label: 'Nemotron Mini 4B', badge: 'NVIDIA', desc: 'Compact lightning-fast helper' },
 ]
 
 function ChatInput({
@@ -368,26 +374,13 @@ function ChatInput({
             </kbd>
           </span>
 
-          {/* Mic button */}
-          <button
-            onClick={toggleRecording}
-            title={isRecording ? 'Stop recording' : 'Record voice note'}
-            className={`relative grid h-8.5 w-8.5 place-items-center rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 ${
-              isRecording
-                ? 'bg-red-500 text-white shadow-md'
-                : `${t.inputBtnBg} ${buttonClass}`
-            }`}
-          >
-            {isRecording ? <FiMicOff className="h-4 w-4" /> : <FiMic className="h-4 w-4" />}
-          </button>
-
           {/* Send button */}
           <button
             onClick={onSubmit}
             disabled={!canSubmit}
             className={`grid h-8.5 w-8.5 place-items-center rounded-xl transition-all duration-200 ${
               canSubmit
-                ? 'bg-linear-to-tr from-teal-600 to-teal-500 text-white shadow-md shadow-teal-500/25 hover:scale-105 active:scale-95 hover:from-teal-500 hover:to-teal-400'
+                ? 'bg-linear-to-tr from-teal-600 to-teal-500 text-white shadow-md shadow-teal-500/25 hover:scale-105 active:scale-95 hover:from-teal-500 hover:to-teal-400 cursor-pointer'
                 : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
             }`}
             aria-label="Send message"

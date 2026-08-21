@@ -1,20 +1,13 @@
 import json
-import time
-import uuid
-from threading import Lock
+from datetime import timedelta
 
+from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.utils import timezone
+
+from .models import CommunityMessage
 
 MESSAGE_TTL_SECONDS = 60
-MAX_MESSAGES = 200
-
-_MESSAGES = []
-_MESSAGES_LOCK = Lock()
-
-
-def _prune_messages(messages, now):
-    cutoff = now - MESSAGE_TTL_SECONDS
-    return [msg for msg in messages if msg.get('timestamp', 0) >= cutoff]
 
 
 class CommunityChatConsumer(AsyncWebsocketConsumer):
@@ -22,45 +15,94 @@ class CommunityChatConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
         await self.accept()
-        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        if self.channel_layer:
+            await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self._send_snapshot()
 
     async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(self.group_name, self.channel_name)
+        if self.channel_layer:
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+    @database_sync_to_async
+    def _create_message(self, name, message):
+        cutoff = timezone.now() - timedelta(seconds=MESSAGE_TTL_SECONDS)
+        CommunityMessage.objects.filter(created_at__lt=cutoff).delete()
+        item = CommunityMessage.objects.create(name=name, message=message)
+        return {
+            'id': item.id,
+            'name': item.name,
+            'message': item.message,
+            'timestamp': int(item.created_at.timestamp()),
+        }
+
+    @database_sync_to_async
+    def _get_active_messages(self):
+        cutoff = timezone.now() - timedelta(seconds=MESSAGE_TTL_SECONDS)
+        CommunityMessage.objects.filter(created_at__lt=cutoff).delete()
+        items = CommunityMessage.objects.filter(created_at__gte=cutoff).order_by('created_at', 'id')
+        return [
+            {
+                'id': item.id,
+                'name': item.name,
+                'message': item.message,
+                'timestamp': int(item.created_at.timestamp()),
+            }
+            for item in items
+        ]
+
+    @database_sync_to_async
+    def _delete_message(self, message_id, name):
+        try:
+            item = CommunityMessage.objects.get(id=message_id, name=name)
+            item.delete()
+            return True
+        except CommunityMessage.DoesNotExist:
+            return False
 
     async def receive(self, text_data=None, bytes_data=None):
         payload = self._parse_json(text_data)
-        name = str(payload.get('name') or '').strip()
-        message = str(payload.get('message') or '').strip()
+        action = payload.get('action') or 'send'
+
+        if action == 'delete':
+            msg_id = payload.get('id')
+            name = str(payload.get('name') or '').strip()
+            if msg_id and name:
+                deleted = await self._delete_message(msg_id, name)
+                if deleted and self.channel_layer:
+                    await self.channel_layer.group_send(
+                        self.group_name,
+                        {
+                            'type': 'broadcast_delete',
+                            'id': msg_id,
+                        },
+                    )
+            return
+
+        name = str(payload.get('name') or '').strip()[:80]
+        message = str(payload.get('message') or '').strip()[:500]
 
         if not name or not message:
             return
 
-        name = name[:50]
-        message = message[:500]
-        now = int(time.time())
+        new_message = await self._create_message(name, message)
 
-        new_message = {
-            'id': str(uuid.uuid4()),
-            'name': name,
-            'message': message,
-            'timestamp': now,
-        }
-
-        with _MESSAGES_LOCK:
-            fresh = _prune_messages(_MESSAGES, now)
-            fresh.append(new_message)
-            if len(fresh) > MAX_MESSAGES:
-                fresh = fresh[-MAX_MESSAGES:]
-            _MESSAGES[:] = fresh
-
-        await self.channel_layer.group_send(
-            self.group_name,
-            {
-                'type': 'broadcast_message',
-                'message': new_message,
-            },
-        )
+        if self.channel_layer:
+            await self.channel_layer.group_send(
+                self.group_name,
+                {
+                    'type': 'broadcast_message',
+                    'message': new_message,
+                },
+            )
+        else:
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        'type': 'message',
+                        'message': new_message,
+                    }
+                )
+            )
 
     async def broadcast_message(self, event):
         await self.send(
@@ -72,16 +114,23 @@ class CommunityChatConsumer(AsyncWebsocketConsumer):
             )
         )
 
+    async def broadcast_delete(self, event):
+        await self.send(
+            text_data=json.dumps(
+                {
+                    'type': 'delete',
+                    'id': event.get('id'),
+                }
+            )
+        )
+
     async def _send_snapshot(self):
-        now = int(time.time())
-        with _MESSAGES_LOCK:
-            fresh = _prune_messages(_MESSAGES, now)
-            _MESSAGES[:] = fresh
+        messages = await self._get_active_messages()
         await self.send(
             text_data=json.dumps(
                 {
                     'type': 'snapshot',
-                    'messages': fresh,
+                    'messages': messages,
                 }
             )
         )

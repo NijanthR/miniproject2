@@ -13,6 +13,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import xml.etree.ElementTree as ET
+import zipfile
 from collections import OrderedDict
 from threading import Lock
 
@@ -27,12 +29,37 @@ from .models import CommunityMessage
 
 MODEL_REGISTRY = {
 	'gemini-3.5-flash': {'provider': 'google', 'model': 'gemini/gemini-3.5-flash'},
-	'gemini-2.5-pro': {'provider': 'google', 'model': 'gemini/gemini-2.5-pro'},
 	'gemini-2.5-flash': {'provider': 'google', 'model': 'gemini/gemini-2.5-flash'},
-	'gemini-2.0-flash': {'provider': 'google', 'model': 'gemini/gemini-2.0-flash'},
-	'gpt-5': {'provider': 'openai', 'model': 'gpt-5'},
+	'gemini-3.6-flash': {'provider': 'google', 'model': 'gemini/gemini-3.6-flash'},
+	'nvidia-llama-3.1-70b': {
+		'provider': 'nvidia',
+		'model': 'openai/meta/llama-3.1-70b-instruct',
+	},
+	'nvidia-llama-3.1-8b': {
+		'provider': 'nvidia',
+		'model': 'openai/meta/llama-3.1-8b-instruct',
+	},
+	'nvidia-llama-3.2-11b-vision': {
+		'provider': 'nvidia',
+		'model': 'openai/meta/llama-3.2-11b-vision-instruct',
+	},
+	'nvidia-llama-3.3-nemotron': {
+		'provider': 'nvidia',
+		'model': 'openai/nvidia/llama-3.3-nemotron-super-49b-v1',
+	},
+	'nvidia-mistral-nemotron': {
+		'provider': 'nvidia',
+		'model': 'openai/mistralai/mistral-nemotron',
+	},
+	'nvidia-nemotron-mini-4b': {
+		'provider': 'nvidia',
+		'model': 'openai/nvidia/nemotron-mini-4b-instruct',
+	},
+	'nvidia-minimax-m3': {
+		'provider': 'nvidia',
+		'model': 'openai/minimaxai/minimax-m3',
+	},
 	'gpt-4o': {'provider': 'openai', 'model': 'gpt-4o'},
-	'claude-4': {'provider': 'anthropic', 'model': 'claude-4'},
 	'claude-3.5': {'provider': 'anthropic', 'model': 'claude-3.5'},
 	'deepseek-chat': {'provider': 'deepseek', 'model': 'deepseek-chat'},
 	'hf-llama3-8b': {
@@ -55,13 +82,17 @@ PROVIDER_KEYS = {
 		or os.getenv('gemini_api_key')
 	),
 	'huggingface': os.getenv('HUGGINGFACE_API_KEY'),
-	'groq': os.getenv('GROQ_API_KEY') or os.getenv('groq_api_key'),
+	'nvidia': (
+		os.getenv('NVIDIA_API')
+		or os.getenv('NVIDIA_API_KEY')
+		or os.getenv('nvidia_api')
+		or os.getenv('nvidia_api_key')
+	),
 	'deepseek': os.getenv('DEEPSEEK_API_KEY'),
 }
 
-VISION_PROVIDERS = {'openai', 'google', 'anthropic'}
+VISION_PROVIDERS = {'openai', 'google', 'anthropic', 'nvidia'}
 WHISPER_MODEL = os.getenv('WHISPER_MODEL', 'distil-whisper/distil-small.en')
-GROQ_WHISPER_MODEL = os.getenv('GROQ_WHISPER_MODEL', 'whisper-large-v3')
 MAX_HISTORY_MESSAGES = int(os.getenv('MAX_CHAT_HISTORY_MESSAGES', '12'))
 MAX_STORED_MESSAGES_PER_CONVERSATION = int(os.getenv('MAX_STORED_MESSAGES_PER_CONVERSATION', '200'))
 MAX_IN_MEMORY_CONVERSATIONS = int(os.getenv('MAX_IN_MEMORY_CONVERSATIONS', '500'))
@@ -95,24 +126,33 @@ else:
 
 
 def _resolve_google_redirect_uri(request=None):
+	if request is not None:
+		requested = str(request.GET.get('redirect_uri') or '').strip().rstrip('/')
+		if requested and (_is_allowed_google_redirect_uri(requested) or requested == 'postmessage'):
+			return requested
+
+		request_origin = str(
+			request.headers.get('Origin')
+			or request.META.get('HTTP_ORIGIN')
+			or request.META.get('HTTP_REFERER')
+			or ''
+		).strip().rstrip('/')
+
+		if request_origin:
+			parsed = urllib.parse.urlparse(request_origin)
+			if parsed.scheme and parsed.netloc:
+				origin_base = f"{parsed.scheme}://{parsed.netloc}"
+				matches = [
+					redirect_uri
+					for redirect_uri in GOOGLE_OAUTH_REDIRECT_URIS
+					if redirect_uri == origin_base or redirect_uri.startswith(f'{origin_base}/')
+				]
+				if matches:
+					matches.sort(key=len, reverse=True)
+					return matches[0]
+
 	if not GOOGLE_OAUTH_REDIRECT_URIS:
 		return 'postmessage'
-
-	request_origin = ''
-	if request is not None:
-		request_origin = str(request.headers.get('Origin') or '').strip().rstrip('/')
-
-	if request_origin:
-		matches = [
-			redirect_uri
-			for redirect_uri in GOOGLE_OAUTH_REDIRECT_URIS
-			if redirect_uri == request_origin or redirect_uri.startswith(f'{request_origin}/')
-		]
-		if matches:
-			# Prefer path-based callbacks like /app when available.
-			matches.sort(key=len, reverse=True)
-			return matches[0]
-
 	return GOOGLE_OAUTH_REDIRECT_URIS[0]
 
 
@@ -120,6 +160,12 @@ def _is_allowed_google_redirect_uri(redirect_uri):
 	normalized = str(redirect_uri or '').strip().rstrip('/')
 	if not normalized:
 		return False
+	if normalized == 'postmessage':
+		return True
+	if re.match(r'^https?://(localhost|127\.0\.0\.1)(:\d+)?(/.*)?$', normalized):
+		return True
+	if re.match(r'^https://[a-zA-Z0-9_.-]+\.vercel\.app(/.*)?$', normalized):
+		return True
 	return normalized in GOOGLE_OAUTH_REDIRECT_URIS
 
 # Temporary chat store kept in process memory only; it is cleared on server restart.
@@ -294,6 +340,76 @@ def _decode_text_bytes(data):
 	return data.decode('utf-8', errors='ignore')
 
 
+def _extract_docx_text(data):
+	try:
+		with zipfile.ZipFile(io.BytesIO(data)) as docx_zip:
+			if 'word/document.xml' not in docx_zip.namelist():
+				raise ValueError('Invalid Word document structure.')
+			xml_content = docx_zip.read('word/document.xml')
+			tree = ET.fromstring(xml_content)
+			paragraphs = []
+			for p in tree.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p'):
+				texts = [
+					node.text
+					for node in p.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t')
+					if node.text
+				]
+				if texts:
+					paragraphs.append(''.join(texts))
+			return '\n'.join(paragraphs).strip()
+	except Exception as exc:
+		raise ValueError(f'Could not parse DOCX file: {exc}')
+
+
+def _extract_pptx_text(data):
+	try:
+		with zipfile.ZipFile(io.BytesIO(data)) as pptx_zip:
+			slide_texts = []
+			slide_names = sorted(
+				[name for name in pptx_zip.namelist() if name.startswith('ppt/slides/slide') and name.endswith('.xml')]
+			)
+			for slide_name in slide_names:
+				xml_content = pptx_zip.read(slide_name)
+				tree = ET.fromstring(xml_content)
+				texts = [
+					node.text
+					for node in tree.iter('{http://schemas.openxmlformats.org/drawingml/2006/main}t')
+					if node.text
+				]
+				if texts:
+					slide_texts.append(' '.join(texts))
+			return '\n\n'.join(slide_texts).strip()
+	except Exception as exc:
+		raise ValueError(f'Could not parse PPTX file: {exc}')
+
+
+def _extract_xlsx_text(data):
+	try:
+		with zipfile.ZipFile(io.BytesIO(data)) as xlsx_zip:
+			shared_strings = []
+			if 'xl/sharedStrings.xml' in xlsx_zip.namelist():
+				tree = ET.fromstring(xlsx_zip.read('xl/sharedStrings.xml'))
+				for t_node in tree.iter('{http://schemas.openxmlformats.org/spreadsheetml/2006/main}t'):
+					if t_node.text:
+						shared_strings.append(t_node.text.strip())
+			return '\n'.join(shared_strings).strip()
+	except Exception as exc:
+		raise ValueError(f'Could not parse XLSX file: {exc}')
+
+
+def _extract_odt_text(data):
+	try:
+		with zipfile.ZipFile(io.BytesIO(data)) as odt_zip:
+			if 'content.xml' not in odt_zip.namelist():
+				raise ValueError('Invalid ODT document structure.')
+			xml_content = odt_zip.read('content.xml')
+			tree = ET.fromstring(xml_content)
+			texts = [node.text for node in tree.iter() if node.text and node.text.strip()]
+			return '\n'.join(texts).strip()
+	except Exception as exc:
+		raise ValueError(f'Could not parse ODT file: {exc}')
+
+
 def _extract_document_text(document):
 	name = str((document or {}).get('name') or 'document').strip() or 'document'
 	mime = str((document or {}).get('type') or '').strip().lower()
@@ -315,11 +431,47 @@ def _extract_document_text(document):
 		'application/xml',
 		'text/xml',
 	}
-	text_extensions = {'txt', 'md', 'csv', 'json', 'xml', 'log'}
+	text_extensions = {'txt', 'md', 'csv', 'json', 'xml', 'log', 'py', 'js', 'html', 'css', 'ts', 'jsx', 'tsx', 'sql', 'c', 'cpp', 'java', 'go', 'rs', 'sh'}
 
 	if mime in text_mimes or extension in text_extensions:
 		text = _decode_text_bytes(data).strip()
 		return {'name': name, 'text': text, 'error': ''}
+
+	if mime in ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword'] or extension in ['docx', 'doc']:
+		try:
+			text = _extract_docx_text(data)
+			if not text:
+				return {'name': name, 'text': '', 'error': 'No extractable text found in Word document.'}
+			return {'name': name, 'text': text, 'error': ''}
+		except Exception as exc:
+			return {'name': name, 'text': '', 'error': str(exc)}
+
+	if mime in ['application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/vnd.ms-powerpoint'] or extension in ['pptx', 'ppt']:
+		try:
+			text = _extract_pptx_text(data)
+			if not text:
+				return {'name': name, 'text': '', 'error': 'No extractable text found in PowerPoint document.'}
+			return {'name': name, 'text': text, 'error': ''}
+		except Exception as exc:
+			return {'name': name, 'text': '', 'error': str(exc)}
+
+	if mime in ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'] or extension in ['xlsx', 'xls']:
+		try:
+			text = _extract_xlsx_text(data)
+			if not text:
+				return {'name': name, 'text': '', 'error': 'No extractable text found in Excel document.'}
+			return {'name': name, 'text': text, 'error': ''}
+		except Exception as exc:
+			return {'name': name, 'text': '', 'error': str(exc)}
+
+	if mime == 'application/vnd.oasis.opendocument.text' or extension == 'odt':
+		try:
+			text = _extract_odt_text(data)
+			if not text:
+				return {'name': name, 'text': '', 'error': 'No extractable text found in ODT document.'}
+			return {'name': name, 'text': text, 'error': ''}
+		except Exception as exc:
+			return {'name': name, 'text': '', 'error': str(exc)}
 
 	if mime == 'application/pdf' or extension == 'pdf':
 		try:
@@ -420,44 +572,7 @@ def _transcribe_audio(audio, api_key):
 	return None
 
 
-def _transcribe_audio_groq(audio, api_key):
-	data_url = (audio or {}).get('dataUrl')
-	if not data_url:
-		return None
-	data, mime = _decode_data_url(data_url)
-	if not data:
-		raise ValueError('Invalid audio payload.')
-	try:
-		from openai import OpenAI
-	except Exception as exc:
-		raise ValueError('Groq transcription requires the openai package. Install it in backend requirements.') from exc
 
-	suffix = _audio_suffix_from_mime(mime)
-	audio_file = io.BytesIO(data)
-	audio_file.name = f'audio{suffix}'
-
-	try:
-		client = OpenAI(
-			api_key=api_key,
-			base_url='https://api.groq.com/openai/v1',
-		)
-		response = client.audio.transcriptions.create(
-			model=GROQ_WHISPER_MODEL,
-			file=audio_file,
-		)
-	except Exception as exc:
-		raise ValueError(f'Groq transcription failed: {exc}') from exc
-
-	text = ''
-	if hasattr(response, 'text'):
-		text = str(getattr(response, 'text') or '').strip()
-	elif isinstance(response, dict):
-		text = str(response.get('text') or '').strip()
-
-	if not text:
-		raise ValueError('Groq transcription returned an empty response.')
-
-	return text
 
 
 def _transcribe_audio_local(audio):
@@ -936,20 +1051,12 @@ def chat(request):
 		if audio:
 			transcription_errors = []
 
-			groq_api_key = (PROVIDER_KEYS.get('groq') or '').strip()
-			if groq_api_key:
+			hf_api_key = (PROVIDER_KEYS.get('huggingface') or '').strip()
+			if hf_api_key:
 				try:
-					transcript = _transcribe_audio_groq(audio, groq_api_key)
+					transcript = _transcribe_audio(audio, hf_api_key)
 				except ValueError as exc:
 					transcription_errors.append(str(exc))
-
-			if not transcript:
-				hf_api_key = (PROVIDER_KEYS.get('huggingface') or '').strip()
-				if hf_api_key:
-					try:
-						transcript = _transcribe_audio(audio, hf_api_key)
-					except ValueError as exc:
-						transcription_errors.append(str(exc))
 
 			if not transcript:
 				try:
@@ -1063,6 +1170,8 @@ def chat(request):
 
 		if config['provider'] == 'deepseek':
 			request_kwargs['api_base'] = 'https://api.deepseek.com'
+		elif config['provider'] == 'nvidia':
+			request_kwargs['api_base'] = 'https://integrate.api.nvidia.com/v1'
 
 		try:
 			if config['provider'] == 'google':
@@ -1482,6 +1591,8 @@ def generate_mcq_test(request):
 
 		if config['provider'] == 'deepseek':
 			request_kwargs['api_base'] = 'https://api.deepseek.com'
+		elif config['provider'] == 'nvidia':
+			request_kwargs['api_base'] = 'https://integrate.api.nvidia.com/v1'
 
 		try:
 			if config['provider'] == 'google':
@@ -1588,6 +1699,8 @@ def generate_coding_test(request):
 
 		if config['provider'] == 'deepseek':
 			request_kwargs['api_base'] = 'https://api.deepseek.com'
+		elif config['provider'] == 'nvidia':
+			request_kwargs['api_base'] = 'https://integrate.api.nvidia.com/v1'
 
 		try:
 			if config['provider'] == 'google':
